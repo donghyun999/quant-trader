@@ -175,6 +175,96 @@ def _print_status(v: dict):
               f"비중 {d['weight']:.1%}, 손익 {d['pnl_pct']:+.2%}")
 
 
+def cmd_live(args):
+    """실전 자동매매: check / run / status / stop / resume / schedule."""
+    from quant.config import PROJECT_ROOT, load_config
+    from quant.live import LiveTrader, read_logs
+
+    cfg = load_config(args.config)
+    if args.tickers:
+        cfg.tickers = _tickers(args.tickers)
+    if args.strategy:
+        cfg.strategy = args.strategy
+    if getattr(args, "broker", None):
+        cfg.broker = args.broker
+    kill = PROJECT_ROOT / cfg.risk.kill_switch_file
+
+    if args.live_cmd == "stop":
+        kill.write_text("stopped by cli\n", encoding="utf-8")
+        print(f"킬 스위치를 켰습니다. 이 파일이 있는 동안 어떤 주문도 나가지 않습니다: {kill}")
+        return
+    if args.live_cmd == "resume":
+        if kill.exists():
+            kill.unlink()
+            print("킬 스위치를 껐습니다. 다음 실행부터 주문이 다시 나갑니다.")
+        else:
+            print("킬 스위치가 꺼져 있습니다.")
+        return
+    if args.live_cmd == "status":
+        print(f"브로커 {cfg.broker} / 전략 {cfg.strategy} / 종목 {','.join(cfg.tickers)} / 킬스위치 {'ON' if kill.exists() else 'off'}")
+        for r in read_logs(PROJECT_ROOT / cfg.log_dir, args.limit):
+            n_ok = sum(1 for x in r.get("results", []) if x.get("ok"))
+            print(f" {r['time']} {r['broker']:<10} {'dry-run' if r['dry_run'] else 'EXECUTE'} "
+                  f"계획 {len(r.get('planned', []))} / 체결요청 {n_ok} / 거부 {len(r.get('rejected', []))}"
+                  f"{' / 오류: ' + r['error'] if r.get('error') else ''}")
+        return
+
+    if cfg.broker == "kis" and not (cfg.kis.get("app_key") and cfg.kis.get("app_secret")):
+        raise SystemExit("KIS 키가 없습니다. config.toml 의 [kis] 또는 환경변수 KIS_APP_KEY/KIS_APP_SECRET/KIS_ACCOUNT_NO 를 설정하세요.")
+    trader = LiveTrader(cfg)
+
+    if args.live_cmd == "check":
+        trader.broker.connect()
+        trader.current_prices(trader.load_prices())  # paper 브로커는 종가를 현재가로 쓴다
+        bal = trader.broker.get_balance(cfg.tickers)
+        print(f"연결 OK: {trader.broker.name} ({getattr(trader.broker, 'mode', '-')}) 실계좌={trader.broker.real_money}")
+        print(f" 현금 {bal.cash:,.0f} {bal.currency} / 평가 {bal.positions_value:,.0f} / 총 {bal.total:,.0f}")
+        for t, p in bal.positions.items():
+            print(f"  - {t}: {p.qty}주 평균 {p.avg_price:,.2f} 현재 {p.price:,.2f}")
+        for t in cfg.tickers:
+            try:
+                print(f"  현재가 {t}: {trader.broker.get_price(t):,.2f}")
+            except Exception as e:  # noqa: BLE001
+                print(f"  현재가 {t}: 조회 실패 ({e})")
+        return
+
+    execute = bool(args.execute)
+    if execute and trader.broker.real_money and not args.yes:
+        print(f"⚠️ 실계좌({cfg.broker}:{cfg.kis.get('mode')})에 실제 주문을 보냅니다. 계속하려면 'yes' 를 입력하세요.")
+        if input("> ").strip().lower() != "yes":
+            raise SystemExit("취소했습니다.")
+
+    def once():
+        rep = trader.run(execute=execute)
+        print(rep.summary_korean())
+        print(DISCLAIMER)
+        return rep
+
+    if args.live_cmd == "run":
+        once()
+        return
+    if args.live_cmd == "schedule":
+        import time as _time
+        from datetime import datetime, timedelta
+
+        hh, mm = (int(x) for x in args.at.split(":"))
+        print(f"매일 {hh:02d}:{mm:02d} 에 실행합니다 (Ctrl+C 로 종료). 킬 스위치: python cli.py live stop")
+        while True:
+            now = datetime.now()
+            nxt = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if nxt <= now:
+                nxt += timedelta(days=1)
+            while nxt.weekday() >= 5:
+                nxt += timedelta(days=1)
+            print(f" 다음 실행: {nxt:%Y-%m-%d %H:%M}")
+            _time.sleep(max(1.0, (nxt - datetime.now()).total_seconds()))
+            trader._prices = None  # 새 데이터로
+            try:
+                once()
+            except Exception as e:  # noqa: BLE001
+                print(f" 실행 오류: {e}")
+
+
 def cmd_strategies(_args):
     from quant.strategies import STRATEGIES
 
@@ -221,12 +311,33 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("strategies", help="전략 목록")
     st.set_defaults(func=cmd_strategies)
+
+    lv = sub.add_parser("live", help="실전 자동매매 (config.toml 기반, 기본 dry-run)")
+    lv.add_argument("--config", default=None, help="설정 파일 (기본 config.toml)")
+    lv.add_argument("--tickers", default="", help="설정 파일의 종목을 덮어씀")
+    lv.add_argument("--strategy", default="", help="설정 파일의 전략을 덮어씀")
+    lv.add_argument("--broker", default="", choices=["", "paper", "kis"], help="설정 파일의 브로커를 덮어씀")
+    ls = lv.add_subparsers(dest="live_cmd", required=True)
+    ls.add_parser("check", help="브로커 연결/잔고/현재가 확인 (주문 없음)")
+    lr = ls.add_parser("run", help="신호 계산 후 주문 (기본 dry-run)")
+    lr.add_argument("--execute", action="store_true", help="실제로 주문을 전송한다")
+    lr.add_argument("--yes", action="store_true", help="실계좌 확인 질문 생략 (스케줄러용)")
+    lsch = ls.add_parser("schedule", help="매일 지정 시각에 run 반복")
+    lsch.add_argument("--at", default="15:20", help="HH:MM (기본 15:20, 국내 장 마감 전)")
+    lsch.add_argument("--execute", action="store_true")
+    lsch.add_argument("--yes", action="store_true")
+    lst = ls.add_parser("status", help="최근 실행 로그")
+    lst.add_argument("--limit", type=int, default=10)
+    ls.add_parser("stop", help="킬 스위치 ON (모든 주문 중단)")
+    ls.add_parser("resume", help="킬 스위치 OFF")
+    lv.set_defaults(func=cmd_live)
     return ap
 
 
 def main(argv=None):
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     try:
         args.func(args)

@@ -51,11 +51,58 @@ python cli.py paper status --tickers SPY,QQQ,TLT,GLD
 - **벤치마크**: 같은 종목을 균등하게 사서 들고만 있었을 때의 결과. 전략이 이보다 나아야 의미가 있습니다.
 - **과최적화 주의**: 파라미터 탐색에서 가장 좋은 값만 고르면 과거에만 잘 맞습니다. 워크포워드 결과를 꼭 확인하세요.
 
+## 실전 자동매매 (한국투자증권 KIS API)
+
+페이퍼 계좌로 충분히 검증한 뒤에만 쓰세요. 구조는 `브로커 인터페이스 → 리스크 가드 → 실행기` 입니다.
+
+```
+quant/broker/base.py   Broker 인터페이스 (잔고, 현재가, 주문)
+quant/broker/paper.py  가상 브로커 (실제 돈 없음)
+quant/broker/kis.py    한국투자증권 KIS Developers (국내주식 + 미국주식, 모의/실전)
+quant/risk.py          리스크 한도 (종목 비중, 1회 금액, 일일 손실, 킬 스위치)
+quant/live.py          실행기: 신호 → 주문 계획 → 리스크 가드 → 전송 → live_log/*.jsonl
+quant/config.py        config.toml 로더
+```
+
+### 설정
+
+1. https://apiportal.koreainvestment.com 에서 앱 키/시크릿을 발급받고 **모의투자** 계좌를 먼저 엽니다.
+2. `config.example.toml` 을 `config.toml` 로 복사해 `[kis]` 키와 계좌번호, `mode = "vts"` 를 채웁니다. (키는 환경변수 `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCOUNT_NO` 로도 줄 수 있습니다.)
+3. `[risk]` 한도를 본인 기준으로 정합니다. 특히 `max_order_value` 와 `max_position_weight`.
+
+### 사용 순서 (반드시 이 순서로)
+
+```
+python cli.py live check                 # 연결/잔고/현재가 확인. 주문 없음
+python cli.py live run                   # dry-run: 어떤 주문이 나갈지 계산만 함
+python cli.py live run --execute         # 모의투자(vts)에 실제 전송
+python cli.py live status                # 실행 로그
+python cli.py live stop / resume         # 킬 스위치 ON/OFF (STOP_TRADING 파일)
+python cli.py live schedule --at 15:20 --execute --yes   # 매일 자동 실행 (평일)
+```
+
+모의투자에서 몇 주 이상 문제 없이 돌아간 뒤에 `mode = "prod"` 로 바꾸세요. 실계좌에 `--execute` 를 쓰면 확인 질문이 뜹니다(`--yes` 로 생략, 스케줄러용).
+Windows 작업 스케줄러에 `run_live.bat --execute --yes` 를 등록해도 됩니다.
+
+### 안전장치
+
+- 기본은 항상 dry-run. `--execute` 없이는 어떤 주문도 나가지 않습니다.
+- 프로젝트 루트에 `STOP_TRADING` 파일이 있으면 모든 주문이 거부됩니다.
+- 리스크 가드: 한 종목 최대 비중, 1회 주문 금액, 1회 실행 최대 주문 수, 당일 손실 한도 초과 시 신규 매수 금지, 허용 종목 목록.
+- 모든 실행(계획, 거부 사유, 전송 결과, 전후 잔고)이 `live_log/날짜.jsonl` 에 남습니다.
+
+### 알아둘 점
+
+- KIS API 의 TR ID 와 엔드포인트는 `quant/broker/kis.py` 의 `ENDPOINTS` 한 곳에 있습니다. KIS 가 스펙을 바꾸면 거기만 고치면 됩니다. 이 저장소의 KIS 연동은 **가짜 HTTP 응답으로만 테스트**됐으므로 모의투자에서 반드시 직접 확인하세요.
+- 국내 종목과 미국 종목은 통화가 달라 한 설정에 섞지 마세요. 전략별로 `config` 를 나눠 `--config` 로 지정하면 됩니다.
+- 미국 주문은 지정가(현재가 ±0.3%)로 나갑니다. 미국 종목 거래소 코드가 기본 목록에 없으면 `[kis.us_exchange]` 에 추가하세요.
+- 신호는 전날 종가 기준이므로 장중 아무 때나 실행해도 같은 결과입니다. 국내는 15:20 전후, 미국은 23:30 이후(서머타임 22:30) 실행을 권합니다.
+
 ## 한계와 면책
 
 - 이 프로그램은 **투자 조언이 아닙니다.** 과거 성과가 미래 수익을 보장하지 않습니다.
 - 무료 데이터에는 오류·누락이 있을 수 있고, 실제 체결가·슬리피지·세금은 다를 수 있습니다.
-- 실제 매매 기능은 없으며, 모든 투자 판단과 책임은 본인에게 있습니다.
+- 실전 매매 기능은 본인이 직접 설정하고 `--execute` 를 켜야만 동작하며, 그로 인한 모든 손실과 책임은 본인에게 있습니다.
 
 ## 프로젝트 구조
 
@@ -72,6 +119,12 @@ quant/
   optimize.py       파라미터 탐색, 워크포워드
   signals.py        오늘의 신호
   paper.py          페이퍼 계좌 (paper_account.json)
+  broker/           브로커 인터페이스 (paper, kis)
+  risk.py           실전 리스크 가드
+  live.py           실전 실행기
+  config.py         config.toml 로더
+config.example.toml 실전 설정 예시 (config.toml 로 복사)
+run_live.bat        실전 1회 실행 (기본 dry-run)
 tests/              테스트 (pytest)
 outputs/            백테스트 결과 CSV
 ```

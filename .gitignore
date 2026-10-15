@@ -15,3 +15,9 @@ paper_account.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# 실전 매매 (증권사 키/로그/킬스위치)
+config.toml
+live_log/
+STOP_TRADING
+.quant_trader_kis_token.json

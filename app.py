@@ -151,7 +151,7 @@ tickers = [t.strip().upper() for t in st.session_state["tickers"].split(",") if 
 config = BacktestConfig(fee_pct=fee, stop_loss_pct=stop_loss, rebalance=rebalance)
 
 st.title("퀀트 트레이더 대시보드")
-tabs = st.tabs(["① 백테스트", "② 파라미터 탐색", "③ 오늘의 신호", "④ 페이퍼 계좌", "⑤ 도움말"])
+tabs = st.tabs(["① 백테스트", "② 파라미터 탐색", "③ 오늘의 신호", "④ 페이퍼 계좌", "⑤ 도움말", "⑥ 실전 매매"])
 
 # ---------- ① 백테스트 ----------
 with tabs[0]:
@@ -420,4 +420,78 @@ with tabs[4]:
 4. 파라미터를 조금 바꿔도 결과가 비슷해야 믿을 만합니다.
 5. 페이퍼 계좌로 몇 주~몇 달 지켜본 뒤 판단하세요.
 """)
+    st.error("⚠️ " + DISCLAIMER)
+
+# ---------- ⑥ 실전 매매 ----------
+with tabs[5]:
+    from quant.config import PROJECT_ROOT, load_config  # noqa: E402
+    from quant.live import LiveTrader, read_logs  # noqa: E402
+
+    st.subheader("실전 자동매매 (한국투자증권 KIS)")
+    lcfg = load_config()
+    kill = PROJECT_ROOT / lcfg.risk.kill_switch_file
+    has_cfg = (PROJECT_ROOT / "config.toml").exists()
+    if not has_cfg:
+        st.warning("config.toml 이 없습니다. config.example.toml 을 복사해 설정한 뒤 다시 여세요. "
+                   "그 전까지는 가상 브로커(paper)로만 동작합니다.")
+    c = st.columns(4)
+    c[0].metric("브로커", f"{lcfg.broker}" + (f" ({lcfg.kis.get('mode', 'vts')})" if lcfg.broker == "kis" else ""))
+    c[1].metric("전략", lcfg.strategy)
+    c[2].metric("종목 수", len(lcfg.tickers))
+    c[3].metric("킬 스위치", "ON (주문 차단)" if kill.exists() else "off")
+    st.caption("종목: " + ", ".join(lcfg.tickers))
+    st.caption(f"리스크 한도: 종목 비중 ≤ {lcfg.risk.max_position_weight:.0%}, "
+               f"1회 주문 ≤ {lcfg.risk.max_order_value:,.0f} (0=무제한), "
+               f"당일 손실 한도 {lcfg.risk.max_daily_loss_pct:.0%}, 1회 최대 {lcfg.risk.max_orders_per_run}건")
+
+    k1, k2, k3 = st.columns(3)
+    if k1.button("🛑 킬 스위치 켜기 (모든 주문 중단)"):
+        kill.write_text("stopped by dashboard\n", encoding="utf-8")
+        st.rerun()
+    if k2.button("킬 스위치 끄기", disabled=not kill.exists()):
+        kill.unlink()
+        st.rerun()
+    if k3.button("dry-run 실행 (주문 전송 안 함)", type="primary"):
+        try:
+            with st.spinner("신호 계산 및 주문 계획 중..."):
+                st.session_state["live_rep"] = LiveTrader(lcfg).run(execute=False)
+        except Exception as e:  # noqa: BLE001
+            st.error(f"실행 실패: {e}")
+
+    rep = st.session_state.get("live_rep")
+    if rep is not None:
+        if rep.error:
+            st.error(rep.error)
+        st.code(rep.summary_korean())
+        if rep.planned:
+            st.dataframe(pd.DataFrame(rep.planned), width="stretch")
+
+    with st.expander("⚠️ 실제 주문 전송", expanded=False):
+        real = lcfg.broker == "kis"
+        st.markdown(
+            "실제 주문은 dry-run 결과를 확인한 뒤에만 보내세요. 실계좌(prod)면 돈이 실제로 움직입니다. "
+            "아래 문구를 정확히 입력해야 버튼이 활성화됩니다."
+        )
+        phrase = "실제 주문을 전송합니다"
+        typed = st.text_input(f"확인 문구 입력: {phrase}", key="live_confirm")
+        if st.button("주문 전송", disabled=(typed.strip() != phrase) or kill.exists()):
+            try:
+                with st.spinner("주문 전송 중..."):
+                    rep2 = LiveTrader(lcfg).run(execute=True)
+                st.session_state["live_rep"] = rep2
+                (st.error if rep2.error else st.success)("완료: " + (rep2.error or f"{len(rep2.results)}건 전송"))
+                st.code(rep2.summary_korean())
+            except Exception as e:  # noqa: BLE001
+                st.error(f"전송 실패: {e}")
+        if not real:
+            st.info("현재 브로커가 paper 라서 가상 계좌에만 반영됩니다.")
+
+    logs = read_logs(PROJECT_ROOT / lcfg.log_dir, 20)
+    if logs:
+        st.markdown("#### 최근 실행 로그")
+        st.dataframe(pd.DataFrame([{
+            "시각": r["time"], "브로커": r["broker"], "모드": "dry-run" if r["dry_run"] else "EXECUTE",
+            "계획": len(r.get("planned", [])), "전송 성공": sum(1 for x in r.get("results", []) if x.get("ok")),
+            "거부": len(r.get("rejected", [])), "오류": r.get("error", ""),
+        } for r in logs]), width="stretch")
     st.error("⚠️ " + DISCLAIMER)

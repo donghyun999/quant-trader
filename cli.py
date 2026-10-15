@@ -1,0 +1,238 @@
+"""quant-trader CLI. 사용 예: python cli.py backtest --tickers SPY --strategy sma_cross"""
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
+DISCLAIMER = "※ 투자 조언이 아니며, 과거 성과가 미래 수익을 보장하지 않습니다."
+
+
+def _tickers(s: str) -> list[str]:
+    return [t.strip().upper() for t in s.split(",") if t.strip()]
+
+
+def _parse_params(strategy_cls, items: list[str] | None) -> dict:
+    """--param key=value 를 전략 Param 기본값 타입에 맞춰 변환."""
+    meta = {p.name: p for p in getattr(strategy_cls, "params", [])}
+    out = {}
+    for it in items or []:
+        if "=" not in it:
+            raise SystemExit(f"--param 형식 오류: '{it}' (예: fast=20)")
+        k, v = it.split("=", 1)
+        k = k.strip()
+        if k not in meta:
+            raise SystemExit(f"'{k}'는 이 전략의 파라미터가 아닙니다. 가능: {', '.join(meta) or '없음'}")
+        d = meta[k].default
+        try:
+            if isinstance(d, bool):
+                out[k] = v.lower() in ("1", "true", "yes", "y")
+            elif isinstance(d, int):
+                out[k] = int(float(v))
+            elif isinstance(d, float):
+                out[k] = float(v)
+            else:
+                out[k] = v
+        except ValueError:
+            raise SystemExit(f"--param {k}의 값 '{v}'을(를) 숫자로 읽을 수 없습니다.")
+    return out
+
+
+def _load(args):
+    from quant.data import get_prices
+    from quant.strategies import STRATEGIES, get_strategy
+
+    if args.strategy not in STRATEGIES:
+        raise SystemExit(f"알 수 없는 전략: {args.strategy}. 가능: {', '.join(STRATEGIES)}")
+    cls = STRATEGIES[args.strategy]
+    params = _parse_params(cls, getattr(args, "param", None))
+    strategy = get_strategy(args.strategy, **params)
+    prices = get_prices(_tickers(args.tickers), period=getattr(args, "period", "2y"))
+    return strategy, prices, params
+
+
+def _fmt_metric(k, v):
+    pct_keys = {"total_return", "cagr", "annual_vol", "max_drawdown", "win_rate", "avg_trade_return",
+                "exposure", "best_month", "worst_month", "benchmark_total_return",
+                "benchmark_cagr", "benchmark_max_drawdown"}
+    if v is None:
+        return "-"
+    if k in pct_keys:
+        return f"{v:.2%}"
+    if k == "final_equity":
+        return f"{v:,.0f}"
+    if isinstance(v, float):
+        return f"{v:.2f}"
+    return str(v)
+
+
+METRIC_LABELS = {
+    "total_return": "총 수익률", "cagr": "연평균 수익률(CAGR)", "annual_vol": "연 변동성",
+    "sharpe": "샤프지수", "sortino": "소르티노", "max_drawdown": "최대 낙폭(MDD)",
+    "max_drawdown_duration_days": "최대 낙폭 지속일", "calmar": "칼마", "win_rate": "승률",
+    "num_trades": "거래 횟수", "profit_factor": "손익비(PF)", "avg_trade_return": "거래당 평균 수익",
+    "exposure": "시장 노출 비율", "best_month": "최고의 달", "worst_month": "최악의 달",
+    "final_equity": "최종 자산", "benchmark_total_return": "벤치마크 총 수익률",
+    "benchmark_cagr": "벤치마크 CAGR", "benchmark_max_drawdown": "벤치마크 MDD",
+}
+
+
+def cmd_backtest(args):
+    from quant.backtest import BacktestConfig, run_backtest
+    from quant.metrics import describe_metrics_korean
+
+    strategy, prices, params = _load(args)
+    cfg = BacktestConfig(fee_pct=args.fee, stop_loss_pct=args.stop_loss, rebalance=args.rebalance)
+    res = run_backtest(strategy, prices, cfg)
+    print(f"\n=== 백테스트: {strategy.label} ({args.strategy}) / {args.tickers} / {args.period} ===")
+    if params:
+        print("파라미터:", params)
+    print(f"{'지표':<24}{'값':>16}")
+    print("-" * 42)
+    for k, v in res.metrics.items():
+        print(f"{METRIC_LABELS.get(k, k):<{24 - sum(1 for c in METRIC_LABELS.get(k, k) if ord(c) > 127)}}{_fmt_metric(k, v):>16}")
+    print("\n[쉬운 설명]")
+    for line in describe_metrics_korean(res.metrics):
+        print(" -", line)
+    out_dir = ROOT / "outputs"
+    out_dir.mkdir(exist_ok=True)
+    name = f"equity_{args.strategy}_{args.tickers.replace(',', '-')}_{args.period}.csv"
+    path = out_dir / name
+    df = res.equity.rename("equity").to_frame()
+    df["benchmark"] = res.benchmark_equity
+    df.to_csv(path, encoding="utf-8-sig")
+    print(f"\n자산 곡선 저장: {path}")
+    print(DISCLAIMER)
+
+
+def cmd_signal(args):
+    from quant.signals import format_signals_korean, today_signals
+
+    strategy, prices, _ = _load(args)
+    print(f"\n=== 오늘의 신호: {strategy.label} ===")
+    print(format_signals_korean(today_signals(strategy, prices)))
+    print(DISCLAIMER)
+
+
+def _last_prices(prices) -> dict:
+    return {t: float(df["close"].iloc[-1]) for t, df in prices.items()}
+
+
+def cmd_paper(args):
+    from quant.paper import PaperAccount
+
+    if args.paper_cmd == "init":
+        acc = PaperAccount(args.file, args.cash)
+        acc.reset(args.cash)
+        print(f"페이퍼 계좌를 초기화했습니다. 초기 자금 {args.cash:,.0f} ({acc.path})")
+        return
+    acc = PaperAccount(args.file)
+    if not acc.exists():
+        raise SystemExit("계좌가 없습니다. 먼저 `python cli.py paper init --cash 10000000`을 실행하세요.")
+
+    if args.paper_cmd == "status":
+        from quant.data import get_prices
+
+        tk = _tickers(args.tickers) if args.tickers else list(acc.positions)
+        px = _last_prices(get_prices(tk, period="1y")) if tk else {}
+        _print_status(acc.value(px))
+        return
+
+    if args.paper_cmd == "run":
+        from quant.signals import format_signals_korean, today_signals
+
+        strategy, prices, _ = _load(args)
+        px = _last_prices(prices)
+        v = acc.value(px)
+        cur_w = {t: d["weight"] for t, d in v["positions"].items()}
+        sigs = today_signals(strategy, prices, cur_w)
+        print(format_signals_korean(sigs))
+        targets = {s.ticker: s.target_weight for s in sigs}
+        last_date = max(df.index[-1] for df in prices.values()).strftime("%Y-%m-%d")
+        orders = acc.rebalance_to(targets, px, args.fee, date=last_date)
+        acc.snapshot(px, date=last_date)
+        acc.save()
+        print("\n[실행된 주문]")
+        if not orders:
+            print(" 없음 (이미 목표 비중에 가깝습니다)")
+        for o in orders:
+            side = "매수" if o["side"] == "BUY" else "매도"
+            print(f" {o['date']} {side} {o['ticker']} {o['qty']}주 @ {o['price']:,.2f} "
+                  f"(금액 {o['value']:,.0f}, 수수료 {o['fee']:,.0f})")
+        _print_status(acc.value(px))
+        print(DISCLAIMER)
+
+
+def _print_status(v: dict):
+    print("\n[계좌 현황]")
+    print(f" 총자산 {v['total']:,.0f} / 현금 {v['cash']:,.0f} / 평가금액 {v['positions_value']:,.0f}")
+    print(f" 손익 {v['pnl']:+,.0f} ({v['pnl_pct']:+.2%}) / 실현손익 {v['realized_pnl']:+,.0f}")
+    for t, d in v["positions"].items():
+        print(f"  - {t}: {d['qty']}주, 평균 {d['avg_price']:,.2f}, 현재 {d['price']:,.2f}, "
+              f"비중 {d['weight']:.1%}, 손익 {d['pnl_pct']:+.2%}")
+
+
+def cmd_strategies(_args):
+    from quant.strategies import STRATEGIES
+
+    for name, cls in STRATEGIES.items():
+        print(f"\n● {name} - {cls.label}")
+        print(f"  {cls.description}")
+        for p in cls.params:
+            rng = f" (범위 {p.min}~{p.max})" if p.min is not None else ""
+            print(f"    · {p.name} = {p.default}{rng}  {p.help}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="cli.py", description="quant-trader: 백테스트 / 신호 / 페이퍼 트레이딩")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    def common(p, period_default="5y"):
+        p.add_argument("--tickers", required=True, help="쉼표 구분 종목. 예: SPY,QQQ 또는 005930.KS")
+        p.add_argument("--strategy", default="sma_cross", help="전략 이름 (cli.py strategies 참고)")
+        p.add_argument("--param", action="append", default=[], help="전략 파라미터 key=value (반복 가능)")
+        p.add_argument("--period", default=period_default, help="1y/2y/3y/5y/10y 등")
+
+    b = sub.add_parser("backtest", help="백테스트 실행")
+    common(b)
+    b.add_argument("--fee", type=float, default=0.0015, help="편도 수수료율 (기본 0.0015)")
+    b.add_argument("--stop-loss", type=float, default=None, help="손절 비율 (예: 0.1)")
+    b.add_argument("--rebalance", default="daily", choices=["daily", "weekly", "monthly"])
+    b.set_defaults(func=cmd_backtest)
+
+    s = sub.add_parser("signal", help="오늘의 신호")
+    common(s, "2y")
+    s.set_defaults(func=cmd_signal)
+
+    pp = sub.add_parser("paper", help="페이퍼 트레이딩 계좌")
+    pp.add_argument("--file", default="paper_account.json", help="계좌 파일 경로")
+    ps = pp.add_subparsers(dest="paper_cmd", required=True)
+    pi = ps.add_parser("init", help="계좌 초기화")
+    pi.add_argument("--cash", type=float, default=10_000_000)
+    pst = ps.add_parser("status", help="계좌 현황")
+    pst.add_argument("--tickers", default="", help="평가에 쓸 종목 (생략 시 보유 종목)")
+    pr = ps.add_parser("run", help="신호 계산 후 계좌 리밸런스")
+    common(pr, "2y")
+    pr.add_argument("--fee", type=float, default=0.0015)
+    pp.set_defaults(func=cmd_paper)
+
+    st = sub.add_parser("strategies", help="전략 목록")
+    st.set_defaults(func=cmd_strategies)
+    return ap
+
+
+def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    args = build_parser().parse_args(argv)
+    try:
+        args.func(args)
+    except (ValueError, ImportError) as e:
+        raise SystemExit(f"오류: {e}")
+
+
+if __name__ == "__main__":
+    main()

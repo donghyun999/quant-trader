@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# 생성 데이터 (재다운로드/재생성 가능)
+data_cache/
+outputs/
+paper_account.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

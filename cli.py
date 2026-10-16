@@ -305,6 +305,38 @@ def cmd_report(args):
         print(f"CSV 저장: {out / 'report_monthly.csv'}, {out / 'report_orders.csv'}")
 
 
+def cmd_explain(args):
+    """오늘 신호의 근거: 시장 필터 상태, 앙상블 구성원별 비중, 다음 리밸런스 날."""
+    from quant.live import market_filter_status, tranche_calendar
+    from quant.signals import format_signals_korean, today_signals
+    from quant.strategies.overlay import build, split_members
+
+    strategy, prices, _ = _load(args)
+    print(f"=== 신호 근거: {strategy.label} ({args.strategy}) / {args.tickers} ===")
+    common = None
+    for df in prices.values():
+        common = df.index if common is None else common.intersection(df.index)
+    print(f"기준 날짜: {common[-1].date()} (모든 종목 데이터가 있는 마지막 날)")
+    status = market_filter_status(prices)
+    if status:
+        print(status)
+    hits, nxt = tranche_calendar(common)
+    print(f"리밸런스: {'오늘이 트랜치 ' + str(hits) + ' 날' if hits else '오늘은 아님'} / 다음 예상일 {nxt.date() if nxt is not None else '-'}")
+    print()
+    print(format_signals_korean(today_signals(strategy, prices)))
+    members = getattr(strategy, "p", {}).get("members")
+    if members:
+        print()
+        print("[앙상블 구성원별 목표 비중] (최종 목표는 이들의 평균)")
+        names = split_members(str(members))
+        header = f"{'전략':<42}" + "".join(f"{t:>12}" for t in prices) + f"{'투자비율':>10}"
+        print(header)
+        for m in names:
+            w = build(m).generate_weights(prices).iloc[-1]
+            print(f"{m:<42}" + "".join(f"{w.get(t, 0.0):>12.0%}" for t in prices) + f"{w.sum():>10.0%}")
+    print(DISCLAIMER)
+
+
 def cmd_strategies(_args):
     from quant.strategies import STRATEGIES
 
@@ -322,7 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def common(p, period_default="5y"):
         p.add_argument("--tickers", required=True, help="쉼표 구분 종목. 예: SPY,QQQ 또는 005930.KS")
-        p.add_argument("--strategy", default="sma_cross", help="전략 이름 (cli.py strategies 참고)")
+        p.add_argument("--strategy", default="ensemble", help="전략 이름 (기본 ensemble, cli.py strategies 참고)")
         p.add_argument("--param", action="append", default=[], help="전략 파라미터 key=value (반복 가능)")
         p.add_argument("--period", default=period_default, help="1y/2y/3y/5y/10y 등")
 
@@ -338,6 +370,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("signal", help="오늘의 신호")
     common(s, "2y")
     s.set_defaults(func=cmd_signal)
+
+    ex = sub.add_parser("explain", help="오늘 신호의 근거 (시장 필터, 구성원별 비중, 다음 리밸런스 날)")
+    common(ex, "2y")
+    ex.set_defaults(func=cmd_explain)
 
     pp = sub.add_parser("paper", help="페이퍼 트레이딩 계좌")
     pp.add_argument("--file", default="paper_account.json", help="계좌 파일 경로")

@@ -630,3 +630,15 @@ vt15_ens 는 2023- 구간에서 -126%p (한국 대형주 급등을 변동성 목
 
 - ⑥ 실전 매매 탭 상단에 `validate_config` 결과(문제 목록 또는 "문제 없음")를 표시. CLI `live doctor` 와 같은 검사.
 - 소스 생성 스크립트가 또 줄바꿈 리터럴을 깨뜨렸지만, 이번엔 커밋 전 `ast.parse` 검사(회차 20 규칙)가 바로 잡았다. 수정은 Edit 도구로.
+
+---
+
+## 회차 24 — 2026-10-16 (CLI explain · 기본 전략 ensemble)
+
+### 한 것
+- `cli.py explain`: 기준 날짜, 시장 추세 필터 상태, 오늘이 리밸런스 날인지/다음 예상일, 신호, 앙상블 구성원별 목표 비중 표. 대시보드 신호 탭 분해와 같은 내용을 CLI 로.
+- CLI `--strategy` 기본값 sma_cross → ensemble. README 예시를 ensemble/explain/report 로 갱신.
+- CLI 스모크 테스트 3개(합성 데이터로 explain/signal/strategies).
+
+### 관찰
+- explain 출력에서 `tranched(base=trend_invvol)` 투자비율이 75%인데 시장 필터는 ON: 4개 트랜치 중 1개가 필터 OFF 시점(월말)에 리밸런스돼 현금으로 남아 있고, 다음 트랜치 날(10/21)에 복귀한다. 트랜치가 "필터 전환을 한 달에 걸쳐 분산 반영"하는 효과가 숫자로 보인다.

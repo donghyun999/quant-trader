@@ -25,11 +25,14 @@ Windows에서는 `run.bat`을 더블클릭해도 됩니다. 브라우저에 한�
 ```
 python cli.py strategies
 python cli.py backtest --tickers SPY,QQQ --strategy sma_cross --period 5y --param fast=20 --param slow=60 --fee 0.0015 --stop-loss 0.1
-python cli.py signal --tickers 005930.KS,000660.KS --strategy dual_momentum
+python cli.py signal --tickers 005930.KS,000660.KS --strategy ensemble
+python cli.py explain --tickers SPY,QQQ,TLT,GLD --strategy ensemble   # 신호 근거: 시장 필터, 구성원별 비중, 다음 리밸런스 날
 python cli.py paper init --cash 10000000
-python cli.py paper run --tickers SPY,QQQ,TLT,GLD --strategy dual_momentum
+python cli.py paper run --tickers SPY,QQQ,TLT,GLD --strategy ensemble
 python cli.py paper status --tickers SPY,QQQ,TLT,GLD
+python cli.py report                 # 월간 성과 리포트 (페이퍼 계좌 + 실전 로그)
 ```
+`--strategy` 를 생략하면 평가 세트 1위인 `ensemble` 이 쓰입니다.
 백테스트의 자산 곡선은 `outputs/` 폴더에 CSV로 저장됩니다.
 종목 표기: 미국은 `SPY`, 한국 코스피는 `005930.KS`, 코스닥은 `.KQ`.
 

@@ -1,6 +1,7 @@
 """quant-trader Streamlit 대시보드 (한국어). 실행: streamlit run app.py"""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -46,6 +47,10 @@ st.set_page_config(page_title="퀀트 트레이더", page_icon="📈", layout="w
 # ---------- 공통 헬퍼 ----------
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_prices(tickers: tuple, period: str):
+    if os.environ.get("QUANT_TRADER_FAKE_DATA"):  # UI 테스트용: 네트워크 없이 합성 데이터
+        from quant.data import fake_prices
+
+        return fake_prices(list(tickers), n_days=700)
     return get_prices(list(tickers), period=period)
 
 
@@ -413,6 +418,11 @@ with tabs[4]:
 - **워크포워드**: 과거 구간에서 설정을 고른 뒤, 그 설정을 '처음 보는 다음 구간'에서 시험하는 방식입니다. 과최적화를 걸러내는 데 도움이 됩니다.
 - **리밸런싱**: 목표 비중에 맞춰 보유 종목을 사고파는 조정 작업입니다.
 - **손절**: 매수가보다 일정 비율 이상 떨어지면 더 큰 손실을 막기 위해 팔아 버리는 규칙입니다.
+
+### 이 프로그램의 전략은 무엇을 위한 것인가
+10년 평가 결과, 여기 있는 전략들은 **상승장에서는 단순 보유보다 덜 법니다.** 이기는 구간은 2020년 급락이나 2022년 약세장 같은 위기 때뿐입니다.
+따라서 "수익을 극대화하는 도구"가 아니라 **"큰 하락을 줄이는(낙폭 관리) 도구"** 로 이해하세요. 10년 연평균 수익을 몇 %p 내주고 최악의 낙폭을 절반으로 줄이는 거래입니다.
+그 거래가 본인에게 맞는지가 전략 선택의 핵심이며, 자세한 수치는 `research/LOG.md` 에 있습니다.
 
 ### 결과 읽는 법
 1. 벤치마크(그냥 들고 있기)보다 **MDD가 얼마나 작은지**, 수익이 비슷한지 먼저 봅니다.

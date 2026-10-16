@@ -28,15 +28,16 @@ class TrendInverseVol(Strategy):
     name = "trend_invvol"
     label = "추세 필터 + 변동성 역가중"
     description = (
-        "매달 말, 가격이 장기 이동평균(기본 200일) 위에 있는 종목만 고릅니다(상승 추세 필터). "
-        "고른 종목에는 최근 변동성이 작을수록 더 큰 비중을 줍니다(변동성 역가중). "
-        "추세가 꺾인 종목 몫은 현금으로 둡니다. 파라미터에 덜 민감한 보수적인 방식입니다."
+        "매달 말, 종목 묶음 전체의 평균 가격이 장기 이동평균(기본 200일) 위에 있을 때만 투자합니다(시장 추세 필터). "
+        "투자할 때는 최근 변동성이 작은 종목에 더 큰 비중을 줍니다(변동성 역가중). "
+        "시장 추세가 꺾이면 전부 현금으로 둡니다. 파라미터에 덜 민감한 보수적인 방식입니다."
     )
     params = [
         Param("trend_window", 200, 50, 300, 10, "추세 판단용 이동평균 기간(거래일)."),
         Param("vol_window", 60, 20, 252, 10, "변동성 계산 기간(거래일)."),
         Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중. 넘치는 몫은 현금."),
         Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
+        Param("market_filter", 1, 0, 1, 1, "1(기본)이면 묶음 전체(균등 지수)의 추세로 투자/현금을 결정, 0이면 종목별 추세."),
     ]
     multi_asset = True
 
@@ -51,8 +52,16 @@ class TrendInverseVol(Strategy):
         idx = common_index(prices)
         tickers = list(aligned)
         close = pd.DataFrame({t: aligned[t]["close"] for t in tickers}, index=idx)
-        trend = close.apply(lambda s: sma(s, self.p["trend_window"]))
-        above = (close > trend).to_numpy() & trend.notna().to_numpy()
+        if int(self.p["market_filter"]) == 1:
+            # 묶음 전체의 균등 지수(각 종목 첫 유효가 기준 정규화 평균)로 추세 판단 → 전 종목에 동일 적용
+            norm = close / close.bfill().iloc[0]
+            index_px = norm.mean(axis=1)
+            idx_trend = sma(index_px, self.p["trend_window"])
+            on = ((index_px > idx_trend) & idx_trend.notna()).to_numpy()
+            above = np.repeat(on[:, None], len(tickers), axis=1) & close.notna().to_numpy()
+        else:
+            trend = close.apply(lambda s: sma(s, self.p["trend_window"]))
+            above = (close > trend).to_numpy() & trend.notna().to_numpy()
         cap = float(self.p["max_weight"])
 
         w = pd.DataFrame(np.nan, index=idx, columns=tickers)

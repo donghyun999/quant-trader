@@ -193,3 +193,25 @@ def get_prices(
     if not out:
         raise ValueError(f"모든 종목의 데이터를 가져오지 못했습니다: {', '.join(tickers)}")
     return out
+
+
+def fake_prices(tickers: list[str] | str, n_days: int = 600, seed: int = 0) -> dict[str, pd.DataFrame]:
+    """네트워크 없이 쓰는 합성 가격 (테스트/데모용). 기하 랜덤워크 OHLCV."""
+    import numpy as np
+
+    if isinstance(tickers, str):
+        tickers = tickers.split(",")
+    tickers = [normalize_ticker(t) for t in tickers if t.strip()]
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=n_days, name="date")
+    out: dict[str, pd.DataFrame] = {}
+    for k, t in enumerate(tickers):
+        rets = rng.normal(0.0003 * (1 + k % 3) - 0.0002, 0.012 + 0.004 * (k % 3), n_days)
+        close = 100.0 * (1 + k * 0.5) * np.exp(np.cumsum(rets))
+        prev = np.concatenate([[close[0]], close[:-1]])
+        open_ = prev * np.exp(rng.normal(0, 0.004, n_days))
+        high = np.maximum(open_, close) * (1 + np.abs(rng.normal(0, 0.005, n_days)))
+        low = np.minimum(open_, close) * (1 - np.abs(rng.normal(0, 0.005, n_days)))
+        out[t] = pd.DataFrame({"open": open_, "high": high, "low": low, "close": close,
+                               "volume": rng.integers(1e5, 1e6, n_days).astype(float)}, index=idx)
+    return out

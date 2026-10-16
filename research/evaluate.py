@@ -51,8 +51,29 @@ WF_GRIDS: dict[str, dict[str, list]] = {
     "dual_momentum": {"lookback": [63, 126, 252], "top_n": [1, 2]},
     "momentum_ensemble": {"top_n": [1, 2, 3], "skip_recent": [0, 21]},
     "trend_invvol": {"trend_window": [100, 200], "max_weight": [0.5, 1.0]},
+    "vol_target": {"target_vol": [0.08, 0.10, 0.15]},
+    "ensemble": {},
     "buy_hold": {},
 }
+
+# 위기 구간: (이름, 시작, 끝). 전략 vs 벤치마크 수익률 차이를 본다.
+CRISES = [
+    ("covid_2020", "2020-02-19", "2020-03-23"),
+    ("bear_2022", "2022-01-03", "2022-10-12"),
+    ("kr_2024_08", "2024-07-11", "2024-08-05"),
+]
+
+
+def crisis_excess(equity: pd.Series, bench: pd.Series) -> dict[str, float]:
+    out = {}
+    for name, a, b in CRISES:
+        e = equity.loc[a:b]
+        bb = bench.loc[a:b]
+        if len(e) < 5 or len(bb) < 5:
+            out[name] = float("nan")
+            continue
+        out[name] = float((e.iloc[-1] / e.iloc[0] - 1) - (bb.iloc[-1] / bb.iloc[0] - 1))
+    return out
 
 CFG = BacktestConfig(fee_pct=0.0015, slippage_pct=0.0005)
 
@@ -90,6 +111,7 @@ def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick
                 "bench_return": _f(m.get("benchmark_total_return")), "bench_mdd": _f(m.get("benchmark_max_drawdown")),
                 "excess_return": _f(m["total_return"]) - _f(m.get("benchmark_total_return")),
                 "mdd_improvement": _f(m["max_drawdown"]) - _f(m.get("benchmark_max_drawdown")),  # 양수면 낙폭 작음
+                **({f"crisis_{k}": v for k, v in crisis_excess(res.equity, res.benchmark_equity).items()} if period == "10y" else {}),
             })
         # 워크포워드 (OOS)
         if quick and uni not in ("us_etf4", "kr_large4"):
@@ -128,6 +150,7 @@ def score_table(rows: list[dict]) -> pd.DataFrame:
 
     robust_score = 0.5*평균 OOS 샤프 + 0.3*(OOS에서 벤치마크 이긴 비율) + 0.2*(OOS 낙폭 개선 비율)
                    + 0.2*평균 전체기간 샤프(5y)  - 0.3*(파라미터 불안정: 구간별 최적값이 전부 다른 비율)
+                   + 1.0*위기구간 평균 초과수익 (코로나 2020, 약세장 2022, 2024-08 급락)
     """
     df = pd.DataFrame([r for r in rows if "error" not in r])
     if df.empty:
@@ -138,6 +161,8 @@ def score_table(rows: list[dict]) -> pd.DataFrame:
         bt5 = g[g.kind == "bt_5y"]
         bt10 = g[g.kind == "bt_10y"]
         unstable = float((oos["n_param_sets"] >= WF_SPLITS).mean()) if len(oos) else float("nan")
+        ccols = [c for c in bt10.columns if c.startswith("crisis_")]
+        crisis = float(np.nanmean(bt10[ccols].to_numpy())) if len(bt10) and ccols else float("nan")
         row = {
             "strategy": s,
             "oos_sharpe_mean": float(oos["sharpe"].mean()),
@@ -151,6 +176,7 @@ def score_table(rows: list[dict]) -> pd.DataFrame:
             "bt10_cagr_mean": float(bt10["cagr"].mean()) if len(bt10) else float("nan"),
             "mdd_worst": float(g["mdd"].min()),
             "param_unstable_frac": unstable,
+            "crisis_excess_mean": crisis,
             "n_evals": int(len(g)),
         }
         row["robust_score"] = (
@@ -159,6 +185,7 @@ def score_table(rows: list[dict]) -> pd.DataFrame:
             + 0.2 * np.nan_to_num(row["oos_mdd_better_frac"])
             + 0.2 * np.nan_to_num(row["bt5_sharpe_mean"])
             - 0.3 * np.nan_to_num(unstable)
+            + 1.0 * np.nan_to_num(crisis)   # 위기 구간 초과수익(예: +0.10 = 벤치마크보다 10%p 덜 잃음)
         )
         out.append(row)
     return pd.DataFrame(out).sort_values("robust_score", ascending=False).reset_index(drop=True)
@@ -194,7 +221,7 @@ def main(argv=None) -> int:
 
     pd.set_option("display.width", 200)
     cols = ["strategy", "robust_score", "oos_sharpe_mean", "oos_sharpe_min", "oos_beat_bench_frac",
-            "oos_mdd_better_frac", "bt5_sharpe_mean", "bt10_cagr_mean", "mdd_worst", "param_unstable_frac"]
+            "oos_mdd_better_frac", "bt5_sharpe_mean", "bt10_cagr_mean", "mdd_worst", "param_unstable_frac", "crisis_excess_mean"]
     print("\n=== 리더보드 (robust_score 내림차순) ===")
     print(table[cols].round(3).to_string(index=False))
     print(f"\n총 {len(rows)} evals, {time.time() - t0:.0f}s. 저장: {lb_path}")

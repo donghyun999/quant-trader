@@ -312,6 +312,7 @@ with tabs[2]:
                 if acc.exists():
                     cur = {t: d["weight"] for t, d in acc.value(last_prices(prices))["positions"].items()}
                 st.session_state["sigs"] = today_signals(build_strategy(sname, params), prices, cur)
+                st.session_state["sigs_prices"] = prices
             except Exception as e:  # noqa: BLE001
                 st.error(f"신호 계산 중 오류가 발생했습니다: {e}")
     sigs = st.session_state.get("sigs")
@@ -328,6 +329,23 @@ with tabs[2]:
             icon = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡", "NONE": "⚪"}[s.action]
             st.markdown(f"{icon} **{s.ticker}** ({ACTION_KO.get(s.action)}): {s.reason}")
         st.caption("현재 비중은 페이퍼 계좌 기준입니다. 신호는 어제까지의 종가로 계산한 참고용 정보입니다.")
+        if sname == "ensemble" and st.session_state.get("sigs_prices") is not None:
+            from quant.strategies.overlay import build, split_members  # noqa: E402
+
+            with st.expander("앙상블 구성원별 목표 비중 (왜 이 비중인가)"):
+                try:
+                    members = split_members(params.get("members", ""))
+                    rows = {}
+                    for m in members:
+                        wm = build(m).generate_weights(st.session_state["sigs_prices"]).iloc[-1]
+                        rows[m] = wm
+                    df_m = pd.DataFrame(rows).T
+                    df_m["합계(투자 비율)"] = df_m.sum(axis=1)
+                    st.dataframe(df_m.style.format("{:.0%}"), width="stretch")
+                    st.caption("각 행은 구성 전략 하나가 단독으로 냈을 비중, 최종 목표는 이들의 평균입니다. "
+                               "합계가 100% 미만이면 그 전략이 일부를 현금으로 두었다는 뜻입니다.")
+                except Exception as e:  # noqa: BLE001
+                    st.caption(f"분해 계산 실패: {e}")
     else:
         st.info("'신호 계산'을 눌러 보세요.")
 

@@ -109,6 +109,16 @@ def _download(ticker: str) -> pd.DataFrame:
 
 RECHECK_SECONDS = 60 * 60  # 최신 거래일이 아직 안 들어왔을 때 재다운로드 재시도 간격
 
+# 고정 공휴일(월, 일). 음력 명절·대체공휴일은 포함하지 않는다 → 그날은 재확인 마커로 1시간 억제.
+FIXED_HOLIDAYS = {
+    "KR": {(1, 1), (3, 1), (5, 5), (6, 6), (8, 15), (10, 3), (10, 9), (12, 25)},
+    "US": {(1, 1), (7, 4), (12, 25)},
+}
+
+
+def _is_holiday(d: pd.Timestamp, market: str) -> bool:
+    return d.weekday() >= 5 or (d.month, d.day) in FIXED_HOLIDAYS[market]
+
 
 def expected_last_trading_date(ticker: str, now: pd.Timestamp | None = None) -> pd.Timestamp:
     """지금 시각(로컬=KST 가정) 기준으로 캐시에 들어 있어야 하는 마지막 거래일.
@@ -119,12 +129,14 @@ def expected_last_trading_date(ticker: str, now: pd.Timestamp | None = None) -> 
     """
     now = pd.Timestamp(now) if now is not None else pd.Timestamp.now()
     if ticker.upper().endswith((".KS", ".KQ")):
+        market = "KR"
         d = now.normalize()
         if now.hour < 16:
             d -= pd.DateOffset(days=1)
     else:
+        market = "US"
         d = (now - pd.DateOffset(hours=7)).normalize() - pd.DateOffset(days=1)
-    while d.weekday() >= 5:
+    while _is_holiday(d, market):
         d -= pd.DateOffset(days=1)
     return d
 

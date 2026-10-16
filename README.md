@@ -79,6 +79,8 @@ quant/config.py        config.toml 로더
 
 ### 설정
 
+단계별 체크리스트는 [docs/KIS_SETUP.md](docs/KIS_SETUP.md) 를 보세요. 요약:
+
 1. https://apiportal.koreainvestment.com 에서 앱 키/시크릿을 발급받고 **모의투자** 계좌를 먼저 엽니다.
 2. `config.example.toml` 을 `config.toml` 로 복사해 `[kis]` 키와 계좌번호, `mode = "vts"` 를 채웁니다. (키는 환경변수 `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCOUNT_NO` 로도 줄 수 있습니다.)
 3. `[risk]` 한도를 본인 기준으로 정합니다. 특히 `max_order_value` 와 `max_position_weight`.

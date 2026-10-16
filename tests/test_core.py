@@ -292,6 +292,8 @@ def test_expected_last_trading_date():
     assert f("SPY", "2026-10-17 10:00") == pd.Timestamp("2026-10-16")
     # 월요일 03:00: 미국 금요일 세션(토 05시 마감) → 금요일
     assert f("SPY", "2026-10-19 03:00") == pd.Timestamp("2026-10-16")
+    # 한글날(10/9, 2026년 금요일) 17:00 → 고정 공휴일 건너뛰고 10/8
+    assert f("005930.KS", "2026-10-09 17:00") == pd.Timestamp("2026-10-08")
 
 
 def test_cache_refetches_when_stale(tmp_path, monkeypatch):

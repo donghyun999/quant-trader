@@ -23,3 +23,4 @@ STOP_TRADING
 .quant_trader_kis_token.json
 # 연구 산출물
 research/results/runs_*.json
+data_cache/*.checked

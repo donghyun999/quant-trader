@@ -278,3 +278,31 @@ def test_clean_drops_flat_zero_volume_rows():
     out = _clean(raw, "X")
     assert len(out) == 3                      # 2번째 행(거래량 0 + 평평한 봉)만 제거
     assert idx[1] not in out.index and idx[2] in out.index
+
+
+def test_expected_last_trading_date():
+    from quant.data import expected_last_trading_date as f
+    # 금요일 15:00 KST: 한국은 아직 장중 → 목요일, 미국은 목요일 세션(금 05시 마감) → 목요일
+    assert f("005930.KS", "2026-10-16 15:00") == pd.Timestamp("2026-10-15")
+    assert f("SPY", "2026-10-16 15:00") == pd.Timestamp("2026-10-15")
+    # 금요일 17:00: 한국 오늘 포함
+    assert f("005930.KS", "2026-10-16 17:00") == pd.Timestamp("2026-10-16")
+    # 토요일 10:00: 한국 금요일, 미국 금요일(토 05시 마감)
+    assert f("005930.KS", "2026-10-17 10:00") == pd.Timestamp("2026-10-16")
+    assert f("SPY", "2026-10-17 10:00") == pd.Timestamp("2026-10-16")
+    # 월요일 03:00: 미국 금요일 세션(토 05시 마감) → 금요일
+    assert f("SPY", "2026-10-19 03:00") == pd.Timestamp("2026-10-16")
+
+
+def test_cache_refetches_when_stale(tmp_path, monkeypatch):
+    import quant.data as d
+    monkeypatch.setattr(d, "CACHE_DIR", tmp_path)
+    idx = pd.bdate_range("2024-01-01", periods=5)
+    old = pd.DataFrame({c: 1.0 for c in d.COLUMNS}, index=idx)
+    old.to_parquet(tmp_path / "AAA.parquet")        # 캐시는 방금 썼지만 마지막 날짜가 오래됨
+    calls = []
+    monkeypatch.setattr(d, "_download", lambda t: (calls.append(t), old)[1])
+    d._load_one("AAA", force=False)
+    assert calls == ["AAA"]                         # 오래된 데이터 → 재다운로드
+    d._load_one("AAA", force=False)
+    assert calls == ["AAA"]                         # 1시간 내 재확인 마커 → 재시도 안 함

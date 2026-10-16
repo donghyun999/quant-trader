@@ -107,13 +107,39 @@ def _download(ticker: str) -> pd.DataFrame:
     return _clean(raw, ticker)
 
 
+RECHECK_SECONDS = 60 * 60  # 최신 거래일이 아직 안 들어왔을 때 재다운로드 재시도 간격
+
+
+def expected_last_trading_date(ticker: str, now: pd.Timestamp | None = None) -> pd.Timestamp:
+    """지금 시각(로컬=KST 가정) 기준으로 캐시에 들어 있어야 하는 마지막 거래일.
+
+    한국(.KS/.KQ): 평일 16:00 이후면 오늘, 그 전이면 직전 평일.
+    미국: 정규장 마감이 KST 익일 05~06시 → (now-7h) 날짜의 직전 평일.
+    공휴일은 고려하지 않으므로, 그날은 데이터가 없어 재다운로드가 한 번 더 일어날 수 있다(RECHECK_SECONDS 로 제한).
+    """
+    now = pd.Timestamp(now) if now is not None else pd.Timestamp.now()
+    if ticker.upper().endswith((".KS", ".KQ")):
+        d = now.normalize()
+        if now.hour < 16:
+            d -= pd.DateOffset(days=1)
+    else:
+        d = (now - pd.DateOffset(hours=7)).normalize() - pd.DateOffset(days=1)
+    while d.weekday() >= 5:
+        d -= pd.DateOffset(days=1)
+    return d
+
+
 def _load_one(ticker: str, force: bool) -> pd.DataFrame:
     path = _cache_path(ticker)
+    marker = path.with_suffix(".checked")
     if not force and path.exists() and (time.time() - path.stat().st_mtime) < CACHE_TTL_SECONDS:
         try:
             df = pd.read_parquet(path)
             if not df.empty:
-                return df
+                fresh = df.index[-1] >= expected_last_trading_date(ticker)
+                recently_checked = marker.exists() and (time.time() - marker.stat().st_mtime) < RECHECK_SECONDS
+                if fresh or recently_checked:
+                    return df
         except Exception:  # 손상된 캐시는 무시하고 재다운로드
             pass
     df = _download(ticker)
@@ -121,6 +147,7 @@ def _load_one(ticker: str, force: bool) -> pd.DataFrame:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         try:
             df.to_parquet(path)
+            marker.touch()  # 최신 거래일이 아직 없어도 1시간 동안은 재시도하지 않음
         except Exception as e:  # 캐시 실패는 치명적이지 않음
             warnings.warn(f"{ticker}: 캐시 저장 실패 ({e})")
     elif path.exists():

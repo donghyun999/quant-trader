@@ -331,3 +331,10 @@ def test_tranche_calendar():
     assert hits == [1] and nxt is not None and nxt > idx[-1]
     hits2, nxt2 = tranche_calendar(pd.bdate_range("2024-01-02", "2024-01-17"))
     assert hits2 == [] and nxt2 is not None
+
+
+def test_market_filter_status():
+    from quant.live import market_filter_status
+    assert market_filter_status(make_prices(n=50)) is None            # 데이터 부족
+    msg = market_filter_status(make_prices(n=300))                      # 단조 상승 → ON
+    assert msg and "투자 ON" in msg and "200일선" in msg

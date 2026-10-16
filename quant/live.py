@@ -92,6 +92,23 @@ def tranche_calendar(idx: pd.DatetimeIndex, n_tranches: int = 4, spacing: int = 
     return hits, nxt
 
 
+def market_filter_status(hist: dict[str, pd.DataFrame], window: int = 200) -> str | None:
+    """묶음 균등 지수 vs 이동평균 상태를 한 줄로. 데이터가 모자라면 None."""
+    from .indicators import sma
+
+    common = None
+    for df in hist.values():
+        common = df.index if common is None else common.intersection(df.index)
+    if common is None or len(common) <= window:
+        return None
+    close = pd.DataFrame({t: df["close"].reindex(common) for t, df in hist.items()})
+    index_px = (close / close.bfill().iloc[0]).mean(axis=1)
+    ma = sma(index_px, window)
+    gap = float(index_px.iloc[-1] / ma.iloc[-1] - 1.0)
+    state = "투자 ON" if gap > 0 else "현금 (OFF)"
+    return f"시장 추세 필터: 묶음 지수가 {window}일선 대비 {gap:+.1%} → {state}"
+
+
 def _balance_dict(b: Balance) -> dict:
     return {
         "total": b.total, "cash": b.cash, "currency": b.currency,
@@ -208,6 +225,9 @@ class LiveTrader:
                 else:
                     rep.notes.append(f"오늘은 리밸런스 날이 아닙니다. 다음 트랜치 예상일: {nxt.date() if nxt is not None else '-'} "
                                      "(이날 전까지는 가격 변동으로 생긴 작은 비중 차이만 반영됩니다).")
+            status = market_filter_status(hist)
+            if status:
+                rep.notes.append(status)
             balance = self.broker.get_balance(self.cfg.tickers)
             rep.balance_before = _balance_dict(balance)
             strategy = get_strategy(self.cfg.strategy, **self.cfg.params)

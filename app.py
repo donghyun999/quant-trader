@@ -504,5 +504,14 @@ with tabs[5]:
             "시각": r["time"], "브로커": r["broker"], "모드": "dry-run" if r["dry_run"] else "EXECUTE",
             "계획": len(r.get("planned", [])), "전송 성공": sum(1 for x in r.get("results", []) if x.get("ok")),
             "거부": len(r.get("rejected", [])), "오류": r.get("error", ""),
+            "메모": " / ".join(r.get("notes", []))[:120],
         } for r in logs]), width="stretch")
+        with st.expander("가장 최근 실행 상세"):
+            last = logs[0]
+            for n in last.get("notes", []):
+                st.write("• " + n)
+            for rj in last.get("rejected", []):
+                st.write("✖ " + rj)
+            if last.get("planned"):
+                st.dataframe(pd.DataFrame(last["planned"]), width="stretch")
     st.error("⚠️ " + DISCLAIMER)

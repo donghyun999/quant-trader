@@ -85,7 +85,8 @@ def cmd_backtest(args):
     from quant.metrics import describe_metrics_korean
 
     strategy, prices, params = _load(args)
-    cfg = BacktestConfig(fee_pct=args.fee, stop_loss_pct=args.stop_loss, rebalance=args.rebalance)
+    cfg = BacktestConfig(fee_pct=args.fee, stop_loss_pct=args.stop_loss, rebalance=args.rebalance,
+                         min_trade_weight=args.min_trade, cash_rate=args.cash_rate)
     res = run_backtest(strategy, prices, cfg)
     print(f"\n=== 백테스트: {strategy.label} ({args.strategy}) / {args.tickers} / {args.period} ===")
     if params:
@@ -308,6 +309,8 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--fee", type=float, default=0.0015, help="편도 수수료율 (기본 0.0015)")
     b.add_argument("--stop-loss", type=float, default=None, help="손절 비율 (예: 0.1)")
     b.add_argument("--rebalance", default="daily", choices=["daily", "weekly", "monthly"])
+    b.add_argument("--min-trade", type=float, default=0.02, help="비중 차이가 이보다 작으면 매매 생략 (기본 0.02, 실전과 동일)")
+    b.add_argument("--cash-rate", type=float, default=0.0, help="현금 연 이자율 (예: 0.03). 기본 0 (보수적)")
     b.set_defaults(func=cmd_backtest)
 
     s = sub.add_parser("signal", help="오늘의 신호")

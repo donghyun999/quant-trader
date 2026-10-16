@@ -93,6 +93,10 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "tr_dm": ("tranched", {"base": "dual_momentum"}),
     "ens_untranched": ("ensemble", {"members": "trend_invvol,momentum_ensemble,buy_hold"}),
     "tv_mkt": ("trend_invvol", {"market_filter": 1}),
+    "ens_w211": ("ensemble", {"weights": "2,1,1"}),
+    "ens_w121": ("ensemble", {"weights": "1,2,1"}),
+    "ens_w112": ("ensemble", {"weights": "1,1,2"}),
+    "ens_w110": ("ensemble", {"weights": "1,1,0"}),
     "tv_p3": ("trend_invvol", {"max_positions": 3}),
     "tv_p4": ("trend_invvol", {"max_positions": 4}),
     "ens_p4": ("ensemble", {"members": "tranched(base=trend_invvol(max_positions=4)),tranched(base=momentum_ensemble),buy_hold"}),
@@ -265,6 +269,7 @@ def main(argv=None) -> int:
     ap.add_argument("--variant-names", default="", help="쉼표 구분 변형 라벨 (기본 전부)")
     ap.add_argument("--fee", type=float, default=None, help="편도 수수료 강제 (기본: 한국 0.0015 / 미국 0.0005 자동)")
     ap.add_argument("--tag", default="", help="결과 파일 접미사 (예: fee2x)")
+    ap.add_argument("--cash-rate", type=float, default=0.0, help="현금 연 이자율 (예: 0.03)")
     ap.add_argument("--min-trade", type=float, default=0.02, help="백테스트 최소 거래 비중 차이 (live threshold 와 동일, 예: 0.02)")
     ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
     ap.add_argument("--universes", default="", help="쉼표 구분 유니버스 이름 (기본 전부)")
@@ -276,7 +281,7 @@ def main(argv=None) -> int:
     if args.only_variants:
         names = []
     cfg = BacktestConfig(fee_pct=args.fee if args.fee is not None else CFG.fee_pct,
-                         slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade)
+                         slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade, cash_rate=args.cash_rate)
     cfg._fee_override = args.fee  # None 이면 시장별 자동
     WF_SPLITS = args.splits
     unis = {u: t for u, t in UNIVERSES.items() if not args.universes or u in args.universes.split(",")}

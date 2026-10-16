@@ -34,6 +34,7 @@ class BacktestConfig:
     stop_loss_pct: float | None = None  # 예: 0.1 = 진입가 대비 -10% 손절
     execution: str = "next_open"       # "next_open" | "next_close"
     min_trade_weight: float = 0.0      # 목표 비중과 현재 비중 차이가 이보다 작으면 매매 생략 (완전 청산은 예외). live 의 threshold 와 동일 역할
+    cash_rate: float = 0.0             # 현금 보유분에 붙는 연 이자율 (예: 0.03 = CMA/MMF 3%). 252 거래일 기준 일할 계산
 
 
 @dataclass
@@ -102,6 +103,7 @@ def _simulate(
     fee, slip = float(cfg.fee_pct), float(cfg.slippage_pct)
     sl = cfg.stop_loss_pct if (use_stop and cfg.stop_loss_pct) else None
     min_trade = float(cfg.min_trade_weight or 0.0)
+    daily_cash = (1.0 + float(cfg.cash_rate or 0.0)) ** (1.0 / 252.0) - 1.0
     rebal = _rebalance_mask(sim_idx, cfg.rebalance)
 
     cash = float(cfg.initial_cash)
@@ -145,6 +147,8 @@ def _simulate(
                 last_target[i] = 0.0
 
     for t in range(T):
+        if daily_cash and t > 0 and cash > 0:
+            cash *= 1.0 + daily_cash  # 전일 보유 현금에 하루치 이자
         valid_c = ~np.isnan(c[t])
         last_close[valid_c] = c[t, valid_c]
         raw = tgt[t]

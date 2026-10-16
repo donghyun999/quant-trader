@@ -148,12 +148,15 @@ with st.sidebar:
     stop_loss = st.slider("손절 비율 (%)", 1, 50, 10) / 100 if use_sl else None
     rebal_label = st.selectbox("리밸런스 주기", list(REBAL.keys()))
     rebalance = REBAL[rebal_label]
+    cash_rate = st.number_input("현금 연 이자율 (%)", 0.0, 10.0, 0.0, 0.5,
+                                help="투자하지 않고 현금으로 둔 돈에 붙는 이자(CMA·MMF 등). 0이면 보수적으로 무시합니다.") / 100
 
     st.divider()
     st.caption("⚠️ " + DISCLAIMER)
 
 tickers = [t.strip().upper() for t in st.session_state["tickers"].split(",") if t.strip()]
-config = BacktestConfig(fee_pct=fee, stop_loss_pct=stop_loss, rebalance=rebalance)
+config = BacktestConfig(fee_pct=fee, stop_loss_pct=stop_loss, rebalance=rebalance,
+                        min_trade_weight=0.02, cash_rate=cash_rate)
 
 st.title("퀀트 트레이더 대시보드")
 tabs = st.tabs(["① 백테스트", "② 파라미터 탐색", "③ 오늘의 신호", "④ 페이퍼 계좌", "⑤ 도움말", "⑥ 실전 매매"])

@@ -308,3 +308,22 @@ def test_cache_refetches_when_stale(tmp_path, monkeypatch):
     assert calls == ["AAA"]                         # 오래된 데이터 → 재다운로드
     d._load_one("AAA", force=False)
     assert calls == ["AAA"]                         # 1시간 내 재확인 마커 → 재시도 안 함
+
+
+def test_cash_rate_accrues_on_idle_cash(make_fake_prices):
+    from quant.backtest import BacktestConfig, run_backtest
+    from quant.strategies.base import Strategy
+
+    class AllCash(Strategy):
+        name = "all_cash_test"
+        multi_asset = True
+
+        def generate_weights(self, prices):
+            idx = next(iter(prices.values())).index
+            return pd.DataFrame(0.0, index=idx, columns=list(prices))
+
+    prices = make_fake_prices(n_days=253, tickers=("AAA",))
+    r0 = run_backtest(AllCash(), prices, BacktestConfig(cash_rate=0.0))
+    r3 = run_backtest(AllCash(), prices, BacktestConfig(cash_rate=0.03))
+    assert r0.equity.iloc[-1] == r0.equity.iloc[0]
+    assert abs(r3.equity.iloc[-1] / r3.equity.iloc[0] - 1.03) < 0.002   # 252일 ≈ 1년 → 약 3%

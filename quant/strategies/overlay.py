@@ -126,6 +126,7 @@ class Ensemble(Strategy):
     params = [
         Param("members", "tranched(base=trend_invvol),tranched(base=momentum_ensemble),buy_hold",
               help="쉼표로 구분한 전략 이름들. 괄호로 파라미터 지정 가능: tranched(base=trend_invvol)"),
+        Param("weights", "", help="멤버별 가중치 (쉼표 또는 | 구분, 예: 2,1,1). 비우면 균등."),
     ]
     multi_asset = True
 
@@ -137,6 +138,15 @@ class Ensemble(Strategy):
         bad = [n for n in names if parse_spec(n)[0] not in reg or parse_spec(n)[0] == "ensemble"]
         if bad:
             raise ValueError(f"앙상블에 넣을 수 없는 전략: {bad}")
+        w = self._weights()
+        if w is not None and (len(w) != len(names) or min(w) < 0 or sum(w) <= 0):
+            raise ValueError("weights 는 members 수와 같아야 하고 음수가 아니어야 합니다.")
+
+    def _weights(self) -> list[float] | None:
+        raw = str(self.p.get("weights", "")).strip()
+        if not raw:
+            return None
+        return [float(x) for x in re.split(r"[,|]", raw) if x.strip()]
 
     def _members(self) -> list[str]:
         return split_members(str(self.p["members"]))
@@ -148,10 +158,12 @@ class Ensemble(Strategy):
         reg = _registry()
         total = None
         names = self._members()
-        for n in names:
-            w = build(n).generate_weights(aligned).reindex(index=idx, columns=tickers).fillna(0.0)
+        wts = self._weights() or [1.0] * len(names)
+        norm = sum(wts)
+        for n, wt in zip(names, wts):
+            w = build(n).generate_weights(aligned).reindex(index=idx, columns=tickers).fillna(0.0) * (wt / norm)
             total = w if total is None else total + w
-        return (total / len(names)).clip(0.0, 1.0)
+        return total.clip(0.0, 1.0)
 
 
 class Tranched(Strategy):

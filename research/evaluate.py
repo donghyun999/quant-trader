@@ -106,6 +106,10 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "rg_stress": ("regime_guard", {"use_stress": 1}),
     "tv_fixed": ("trend_invvol", {"trend_window": 200}),      # 격자 없이 기본값 고정
     "rg_persist5": ("regime_guard", {"use_stress": 1, "stress_days": 5}),
+    "rg_ramp_sym5": ("regime_guard", {"ramp": 1, "band": 0.05}),
+    "rg_ramp_sym10": ("regime_guard", {"ramp": 1, "band": 0.10}),
+    "rg_ramp_down5": ("regime_guard", {"ramp": 2, "band": 0.05}),
+    "rg_ramp_down10": ("regime_guard", {"ramp": 2, "band": 0.10}),
     "rg_monthly": ("regime_guard", {"daily_exposure": 0}),
     "rg_hard": ("regime_guard", {"soft_exposure": 0.0}),
     "tr_rg": ("tranched", {"base": "regime_guard"}),

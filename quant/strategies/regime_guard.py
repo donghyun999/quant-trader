@@ -37,6 +37,8 @@ class RegimeGuard(Strategy):
         Param("vol_window", 60, 20, 252, 10, "종목 간 변동성 역가중 계산 기간(거래일)."),
         Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중."),
         Param("rebal_offset", 0, 0, 15, 1, "종목 간 비중 갱신 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
+        Param("ramp", 0, 0, 2, 1, "0=계단(추세 OFF 면 soft_exposure), 1=추세선 ±band 구간에서 0~100% 대칭 선형, 2=추세선 위 100%, 아래 band 까지 soft_exposure 로 선형 감소."),
+        Param("band", 0.05, 0.01, 0.30, 0.01, "ramp 의 거리 폭 (예: 0.05 = 추세선 대비 5%)."),
         Param("stress_days", 1, 1, 20, 1, "스트레스가 이 일수만큼 연속돼야 인정합니다(깜빡임 방지). 1=즉시."),
         Param("daily_exposure", 1, 0, 1, 1, "1이면 노출을 매일 갱신, 0이면 종목 비중 갱신일(트랜치 날)에만 갱신."),
     ]
@@ -64,7 +66,17 @@ class RegimeGuard(Strategy):
         n_days = int(self.p["stress_days"])
         if n_days > 1:
             stress = stress.astype(float).rolling(n_days, min_periods=n_days).sum().eq(n_days)
-        exposure = np.where(trend_on, 1.0, np.where(stress, 0.0, float(self.p["soft_exposure"])))
+        soft = float(self.p["soft_exposure"])
+        ramp, band = int(self.p["ramp"]), float(self.p["band"])
+        if ramp == 0:
+            exposure = np.where(trend_on, 1.0, np.where(stress, 0.0, soft))
+        else:
+            dist = (index_px / trend_ma - 1.0).to_numpy()
+            if ramp == 1:
+                cont = np.clip(0.5 + dist / (2.0 * band), 0.0, 1.0)
+            else:
+                cont = np.where(dist >= 0, 1.0, np.clip(1.0 + dist * (1.0 - soft) / band, soft, 1.0))
+            exposure = np.where(stress & ~trend_on.to_numpy(), 0.0, cont)
         exposure = pd.Series(exposure, index=close.index)
         exposure[trend_ma.isna()] = 0.0  # 워밍업 구간은 다른 전략과 같이 미투자
         return pd.DataFrame({"index_px": index_px, "trend_on": trend_on, "stress": stress, "exposure": exposure})

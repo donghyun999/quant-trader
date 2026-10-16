@@ -1,0 +1,205 @@
+"""전략 평가 세트(테스트셋).
+
+여러 종목 묶음 × 여러 기간 × 워크포워드로 모든 전략을 돌려 '강건성 점수'를 매긴다.
+단일 백테스트 숫자가 아니라 "처음 보는 구간(OOS)에서도 벤치마크를 이기는가"를 본다.
+
+실행:  python -X utf8 research/evaluate.py [--quick] [--strategies a,b] [--out research/results]
+출력:  research/results/leaderboard.csv, research/results/runs_<timestamp>.json
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import sys
+import time
+import warnings
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from quant.backtest import BacktestConfig, run_backtest  # noqa: E402
+from quant.data import get_prices  # noqa: E402
+from quant.optimize import walk_forward  # noqa: E402
+from quant.strategies import STRATEGIES  # noqa: E402
+
+warnings.filterwarnings("ignore")
+
+# ---------- 평가 세트 정의 ----------
+UNIVERSES: dict[str, list[str]] = {
+    "us_etf4": ["SPY", "QQQ", "TLT", "GLD"],
+    "us_global7": ["SPY", "IWM", "EFA", "EEM", "TLT", "GLD", "VNQ"],
+    "kr_large4": ["005930.KS", "000660.KS", "035420.KS", "005380.KS"],
+    "kr_etf3": ["069500.KS", "229200.KS", "114260.KS"],
+    "spy_only": ["SPY"],
+    "samsung_only": ["005930.KS"],
+}
+PERIODS = ["3y", "5y", "10y"]
+WF_PERIOD = "10y"
+WF_SPLITS = 4
+
+# 워크포워드용 작은 파라미터 격자 (기본값 주변). 전략별로 없으면 {} = 기본값만.
+WF_GRIDS: dict[str, dict[str, list]] = {
+    "sma_cross": {"fast": [10, 20, 50], "slow": [60, 120, 200]},
+    "rsi_reversion": {"period": [7, 14], "oversold": [25, 30, 35]},
+    "bollinger": {"period": [20, 40], "n_std": [1.5, 2.0, 2.5]},
+    "dual_momentum": {"lookback": [63, 126, 252], "top_n": [1, 2]},
+    "momentum_ensemble": {"top_n": [1, 2, 3], "skip_recent": [0, 21]},
+    "trend_invvol": {"trend_window": [100, 200], "max_weight": [0.5, 1.0]},
+    "buy_hold": {},
+}
+
+CFG = BacktestConfig(fee_pct=0.0015, slippage_pct=0.0005)
+
+
+def _f(x) -> float:
+    try:
+        v = float(x)
+        return v if math.isfinite(v) else float("nan")
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick: bool) -> list[dict]:
+    """한 전략을 모든 유니버스/기간에 대해 평가. 행 단위 결과 반환."""
+    cls = STRATEGIES[name]
+    rows: list[dict] = []
+    for uni, prices10 in data.items():
+        if cls.multi_asset and len(prices10) == 1 and name == "dual_momentum":
+            pass  # 단일 종목 듀얼모멘텀 = 절대 모멘텀만. 평가에 포함.
+        # 전체 기간 백테스트 (기본 파라미터)
+        for period in (["5y"] if quick else PERIODS):
+            prices = _slice(prices10, period)
+            if not prices:
+                continue
+            try:
+                res = run_backtest(cls(), prices, CFG)
+            except Exception as e:  # noqa: BLE001
+                rows.append({"strategy": name, "universe": uni, "kind": f"bt_{period}", "error": str(e)})
+                continue
+            m = res.metrics
+            rows.append({
+                "strategy": name, "universe": uni, "kind": f"bt_{period}",
+                "total_return": _f(m["total_return"]), "cagr": _f(m["cagr"]), "sharpe": _f(m["sharpe"]),
+                "mdd": _f(m["max_drawdown"]), "num_trades": int(m["num_trades"]),
+                "bench_return": _f(m.get("benchmark_total_return")), "bench_mdd": _f(m.get("benchmark_max_drawdown")),
+                "excess_return": _f(m["total_return"]) - _f(m.get("benchmark_total_return")),
+                "mdd_improvement": _f(m["max_drawdown"]) - _f(m.get("benchmark_max_drawdown")),  # 양수면 낙폭 작음
+            })
+        # 워크포워드 (OOS)
+        if quick and uni not in ("us_etf4", "kr_large4"):
+            continue
+        grid = WF_GRIDS.get(name, {})
+        try:
+            wf = walk_forward(cls, prices10, grid, CFG, n_splits=WF_SPLITS)
+            om = wf["oos_metrics"]
+            folds = wf["folds"]
+            rows.append({
+                "strategy": name, "universe": uni, "kind": "wf_oos",
+                "total_return": _f(om["total_return"]), "cagr": _f(om["cagr"]), "sharpe": _f(om["sharpe"]),
+                "mdd": _f(om["max_drawdown"]), "num_trades": int(om["num_trades"]),
+                "bench_return": _f(om.get("benchmark_total_return")), "bench_mdd": _f(om.get("benchmark_max_drawdown")),
+                "excess_return": _f(om["total_return"]) - _f(om.get("benchmark_total_return")),
+                "mdd_improvement": _f(om["max_drawdown"]) - _f(om.get("benchmark_max_drawdown")),
+                "is_sharpe_avg": float(np.nanmean([f["train_metric"] for f in folds])),
+                "oos_fold_sharpes": [round(_f(f["test_metric"]), 2) for f in folds],
+                "n_param_sets": len({tuple(sorted(f["best_params"].items())) for f in folds}),
+            })
+        except Exception as e:  # noqa: BLE001
+            rows.append({"strategy": name, "universe": uni, "kind": "wf_oos", "error": str(e)})
+    return rows
+
+
+def _slice(prices10: dict[str, pd.DataFrame], period: str) -> dict[str, pd.DataFrame]:
+    years = int(period.rstrip("y"))
+    end = max(df.index[-1] for df in prices10.values())
+    start = end - pd.DateOffset(years=years)
+    out = {t: df.loc[df.index >= start] for t, df in prices10.items()}
+    return {t: d for t, d in out.items() if len(d) > 60}
+
+
+def score_table(rows: list[dict]) -> pd.DataFrame:
+    """전략별 강건성 점수.
+
+    robust_score = 0.5*평균 OOS 샤프 + 0.3*(OOS에서 벤치마크 이긴 비율) + 0.2*(OOS 낙폭 개선 비율)
+                   + 0.2*평균 전체기간 샤프(5y)  - 0.3*(파라미터 불안정: 구간별 최적값이 전부 다른 비율)
+    """
+    df = pd.DataFrame([r for r in rows if "error" not in r])
+    if df.empty:
+        return df
+    out = []
+    for s, g in df.groupby("strategy"):
+        oos = g[g.kind == "wf_oos"]
+        bt5 = g[g.kind == "bt_5y"]
+        bt10 = g[g.kind == "bt_10y"]
+        unstable = float((oos["n_param_sets"] >= WF_SPLITS).mean()) if len(oos) else float("nan")
+        row = {
+            "strategy": s,
+            "oos_sharpe_mean": float(oos["sharpe"].mean()),
+            "oos_sharpe_min": float(oos["sharpe"].min()),
+            "oos_beat_bench_frac": float((oos["excess_return"] > 0).mean()),
+            "oos_mdd_better_frac": float((oos["mdd_improvement"] > 0).mean()),
+            "oos_excess_return_mean": float(oos["excess_return"].mean()),
+            "bt5_sharpe_mean": float(bt5["sharpe"].mean()),
+            "bt5_beat_bench_frac": float((bt5["excess_return"] > 0).mean()),
+            "bt10_sharpe_mean": float(bt10["sharpe"].mean()) if len(bt10) else float("nan"),
+            "bt10_cagr_mean": float(bt10["cagr"].mean()) if len(bt10) else float("nan"),
+            "mdd_worst": float(g["mdd"].min()),
+            "param_unstable_frac": unstable,
+            "n_evals": int(len(g)),
+        }
+        row["robust_score"] = (
+            0.5 * np.nan_to_num(row["oos_sharpe_mean"])
+            + 0.3 * np.nan_to_num(row["oos_beat_bench_frac"])
+            + 0.2 * np.nan_to_num(row["oos_mdd_better_frac"])
+            + 0.2 * np.nan_to_num(row["bt5_sharpe_mean"])
+            - 0.3 * np.nan_to_num(unstable)
+        )
+        out.append(row)
+    return pd.DataFrame(out).sort_values("robust_score", ascending=False).reset_index(drop=True)
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--quick", action="store_true", help="5y + 핵심 유니버스 2개만 워크포워드")
+    ap.add_argument("--strategies", default="", help="쉼표 구분. 기본 전체")
+    ap.add_argument("--out", default=str(ROOT / "research" / "results"))
+    args = ap.parse_args(argv)
+    names = [s for s in args.strategies.split(",") if s] or list(STRATEGIES)
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    t0 = time.time()
+    print("데이터 로드...")
+    data = {u: get_prices(tk, period=WF_PERIOD) for u, tk in UNIVERSES.items()}
+    rows: list[dict] = []
+    for n in names:
+        t1 = time.time()
+        r = evaluate_strategy(n, data, args.quick)
+        rows.extend(r)
+        errs = [x for x in r if "error" in x]
+        print(f"  {n:<24} {len(r):>3} evals  {time.time() - t1:5.1f}s" + (f"  오류 {len(errs)}: {errs[0]['error'][:60]}" if errs else ""))
+    table = score_table(rows)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    (out_dir / f"runs_{stamp}.json").write_text(json.dumps(rows, ensure_ascii=False, default=str, indent=1), encoding="utf-8")
+    lb_path = out_dir / "leaderboard.csv"
+    table.to_csv(lb_path, index=False, encoding="utf-8-sig")
+    # 상세(유니버스별) 표
+    pd.DataFrame([r for r in rows if "error" not in r]).to_csv(out_dir / "detail_latest.csv", index=False, encoding="utf-8-sig")
+
+    pd.set_option("display.width", 200)
+    cols = ["strategy", "robust_score", "oos_sharpe_mean", "oos_sharpe_min", "oos_beat_bench_frac",
+            "oos_mdd_better_frac", "bt5_sharpe_mean", "bt10_cagr_mean", "mdd_worst", "param_unstable_frac"]
+    print("\n=== 리더보드 (robust_score 내림차순) ===")
+    print(table[cols].round(3).to_string(index=False))
+    print(f"\n총 {len(rows)} evals, {time.time() - t0:.0f}s. 저장: {lb_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

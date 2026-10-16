@@ -39,6 +39,7 @@ class RegimeGuard(Strategy):
         Param("rebal_offset", 0, 0, 15, 1, "종목 간 비중 갱신 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
         Param("ramp", 0, 0, 2, 1, "0=계단(추세 OFF 면 soft_exposure), 1=추세선 ±band 구간에서 0~100% 대칭 선형, 2=추세선 위 100%, 아래 band 까지 soft_exposure 로 선형 감소."),
         Param("band", 0.05, 0.01, 0.30, 0.01, "ramp 의 거리 폭 (예: 0.05 = 추세선 대비 5%)."),
+        Param("reentry_window", 0, 0, 200, 10, "0=이탈·재진입 모두 trend_window. N이면 추세 OFF 상태에서 지수가 N일 평균 위로 올라오면 다시 ON (빠른 재진입)."),
         Param("stress_days", 1, 1, 20, 1, "스트레스가 이 일수만큼 연속돼야 인정합니다(깜빡임 방지). 1=즉시."),
         Param("daily_exposure", 1, 0, 1, 1, "1이면 노출을 매일 갱신, 0이면 종목 비중 갱신일(트랜치 날)에만 갱신."),
     ]
@@ -57,6 +58,14 @@ class RegimeGuard(Strategy):
         index_px = (close / close.bfill().iloc[0]).mean(axis=1)
         trend_ma = sma(index_px, self.p["trend_window"])
         trend_on = (index_px > trend_ma) & trend_ma.notna()
+        rw = int(self.p["reentry_window"])
+        if rw > 0 and rw != int(self.p["trend_window"]):
+            from .base import hysteresis
+
+            fast_ma = sma(index_px, rw)
+            # ON 상태: 장기선 아래로 내려가면 OFF. OFF 상태: 단기선 위로 올라오면 ON.
+            state = hysteresis(index_px > fast_ma, index_px < trend_ma)
+            trend_on = (state > 0) & trend_ma.notna()
         rets = index_px.pct_change()
         vs = rets.rolling(int(self.p["vol_short"]), min_periods=int(self.p["vol_short"])).std(ddof=0)
         vl = rets.rolling(int(self.p["vol_long"]), min_periods=int(self.p["vol_long"])).std(ddof=0)

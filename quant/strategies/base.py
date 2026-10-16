@@ -17,6 +17,7 @@ class Param:
     max: Any = None
     step: Any = None
     help: str = ""
+    advanced: bool = False   # True 면 UI 에서 "고급 설정" 으로 접어 둔다 (실험용·운영용 옵션)
 
 
 def common_index(prices: dict[str, pd.DataFrame]) -> pd.DatetimeIndex:

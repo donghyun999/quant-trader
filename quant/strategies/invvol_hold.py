@@ -18,7 +18,7 @@ class InverseVolHold(Strategy):
     params = [
         Param("vol_window", 60, 20, 252, 10, "변동성 계산 기간(거래일)."),
         Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중. 넘치는 몫은 현금."),
-        Param("rebal_offset", 0, 0, 15, 1, "비중 갱신 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
+        Param("rebal_offset", 0, 0, 15, 1, "비중 갱신 날짜: 월말에서 며칠(거래일) 뒤. 0=월말.", advanced=True),
     ]
     multi_asset = True
 

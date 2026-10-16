@@ -123,25 +123,35 @@ with st.sidebar:
     st.caption(scls.description)
 
     params: dict = {}
-    for p in scls.params:
+    basic = [p for p in scls.params if not getattr(p, "advanced", False)]
+    advanced = [p for p in scls.params if getattr(p, "advanced", False)]
+
+    def _param_widget(p, container):
         key = f"param_{sname}_{p.name}"
         is_int = isinstance(p.default, int) and not isinstance(p.default, bool)
         if isinstance(p.default, bool):
-            params[p.name] = st.checkbox(p.name, value=p.default, key=key, help=p.help or None)
+            params[p.name] = container.checkbox(p.name, value=p.default, key=key, help=p.help or None)
         elif is_int:
-            params[p.name] = int(st.number_input(
+            params[p.name] = int(container.number_input(
                 p.name, value=int(p.default),
                 min_value=int(p.min) if p.min is not None else None,
                 max_value=int(p.max) if p.max is not None else None,
                 step=int(p.step) if p.step else 1, key=key, help=p.help or None))
         elif isinstance(p.default, float):
-            params[p.name] = float(st.number_input(
+            params[p.name] = float(container.number_input(
                 p.name, value=float(p.default),
                 min_value=float(p.min) if p.min is not None else None,
                 max_value=float(p.max) if p.max is not None else None,
                 step=float(p.step) if p.step else 0.01, format="%.4f", key=key, help=p.help or None))
         else:
-            params[p.name] = st.text_input(p.name, value=str(p.default), key=key, help=p.help or None)
+            params[p.name] = container.text_input(p.name, value=str(p.default), key=key, help=p.help or None)
+
+    for p in basic:
+        _param_widget(p, st)
+    if advanced:
+        with st.expander(f"고급 설정 ({len(advanced)}개) — 기본값 권장"):
+            for p in advanced:
+                _param_widget(p, st)
 
     fee = st.number_input("수수료+세금 (편도, %)", 0.0, 5.0, 0.15, 0.01, format="%.3f") / 100
     use_sl = st.checkbox("손절 사용", value=False)

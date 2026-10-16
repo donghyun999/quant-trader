@@ -39,7 +39,7 @@ class DualMomentum(Strategy):
     params = [
         Param("lookback", 126, 20, 252, 1, "수익률을 비교할 기간(거래일). 126일은 약 6개월입니다."),
         Param("top_n", 2, 1, 10, 1, "매달 보유할 상위 종목 수."),
-        Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
+        Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말.", advanced=True),
     ]
     multi_asset = True
 

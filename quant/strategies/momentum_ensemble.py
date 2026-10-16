@@ -19,10 +19,10 @@ class MomentumEnsemble(Strategy):
     )
     params = [
         Param("top_n", 2, 1, 10, 1, "매달 보유할 상위 종목 수."),
-        Param("vol_window", 60, 20, 252, 10, "변동성 역가중 계산 기간(거래일). 0이면 균등 비중."),
-        Param("skip_recent", 0, 0, 21, 1, "최근 며칠을 모멘텀 계산에서 제외할지 (단기 되돌림 회피, 21=1개월)."),
-        Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
-        Param("market_filter", 1, 0, 1, 1, "1(기본)이면 묶음 전체 균등 지수가 200일선 아래일 때 전부 현금. 0이면 종목별 절대 모멘텀(평균 수익률<0 이면 제외)."),
+        Param("vol_window", 60, 20, 252, 10, "변동성 역가중 계산 기간(거래일). 0이면 균등 비중.", advanced=True),
+        Param("skip_recent", 0, 0, 21, 1, "최근 며칠을 모멘텀 계산에서 제외할지 (단기 되돌림 회피, 21=1개월).", advanced=True),
+        Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말.", advanced=True),
+        Param("market_filter", 1, 0, 1, 1, "1(기본)이면 묶음 전체 균등 지수가 200일선 아래일 때 전부 현금. 0이면 종목별 절대 모멘텀(평균 수익률<0 이면 제외).", advanced=True),
     ]
     multi_asset = True
     LOOKBACKS = (63, 126, 252)

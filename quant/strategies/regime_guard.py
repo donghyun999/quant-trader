@@ -29,19 +29,19 @@ class RegimeGuard(Strategy):
     )
     params = [
         Param("trend_window", 200, 50, 300, 10, "추세 판단용 이동평균 기간(거래일)."),
-        Param("vol_short", 20, 5, 60, 5, "단기 변동성 기간(거래일)."),
-        Param("vol_long", 252, 60, 504, 21, "장기 변동성 기간(거래일)."),
-        Param("use_stress", 0, 0, 1, 1, "1이면 변동성 스트레스 확인 시 0%로 내려갑니다. 평가 결과 기여가 없어 기본 0 (회차 28)."),
-        Param("stress_mult", 1.5, 1.0, 3.0, 0.1, "단기 변동성이 장기 변동성의 몇 배를 넘으면 스트레스로 봅니다 (use_stress=1 일 때)."),
+        Param("vol_short", 20, 5, 60, 5, "단기 변동성 기간(거래일).", advanced=True),
+        Param("vol_long", 252, 60, 504, 21, "장기 변동성 기간(거래일).", advanced=True),
+        Param("use_stress", 0, 0, 1, 1, "1이면 변동성 스트레스 확인 시 0%로 내려갑니다. 평가 결과 기여가 없어 기본 0 (회차 28).", advanced=True),
+        Param("stress_mult", 1.5, 1.0, 3.0, 0.1, "단기 변동성이 장기 변동성의 몇 배를 넘으면 스트레스로 봅니다 (use_stress=1 일 때).", advanced=True),
         Param("soft_exposure", 0.5, 0.0, 1.0, 0.1, "추세 OFF·스트레스 OFF 일 때 투자 비율."),
-        Param("vol_window", 60, 20, 252, 10, "종목 간 변동성 역가중 계산 기간(거래일)."),
-        Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중."),
-        Param("rebal_offset", 0, 0, 15, 1, "종목 간 비중 갱신 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
-        Param("ramp", 0, 0, 2, 1, "0=계단(추세 OFF 면 soft_exposure), 1=추세선 ±band 구간에서 0~100% 대칭 선형, 2=추세선 위 100%, 아래 band 까지 soft_exposure 로 선형 감소."),
-        Param("band", 0.05, 0.01, 0.30, 0.01, "ramp 의 거리 폭 (예: 0.05 = 추세선 대비 5%)."),
-        Param("reentry_window", 0, 0, 200, 10, "0=이탈·재진입 모두 trend_window. N이면 추세 OFF 상태에서 지수가 N일 평균 위로 올라오면 다시 ON (빠른 재진입)."),
-        Param("stress_days", 1, 1, 20, 1, "스트레스가 이 일수만큼 연속돼야 인정합니다(깜빡임 방지). 1=즉시."),
-        Param("daily_exposure", 1, 0, 1, 1, "1이면 노출을 매일 갱신, 0이면 종목 비중 갱신일(트랜치 날)에만 갱신."),
+        Param("vol_window", 60, 20, 252, 10, "종목 간 변동성 역가중 계산 기간(거래일).", advanced=True),
+        Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중.", advanced=True),
+        Param("rebal_offset", 0, 0, 15, 1, "종목 간 비중 갱신 날짜: 월말에서 며칠(거래일) 뒤. 0=월말.", advanced=True),
+        Param("ramp", 0, 0, 2, 1, "0=계단(추세 OFF 면 soft_exposure), 1=추세선 ±band 구간에서 0~100% 대칭 선형, 2=추세선 위 100%, 아래 band 까지 soft_exposure 로 선형 감소.", advanced=True),
+        Param("band", 0.05, 0.01, 0.30, 0.01, "ramp 의 거리 폭 (예: 0.05 = 추세선 대비 5%).", advanced=True),
+        Param("reentry_window", 0, 0, 200, 10, "0=이탈·재진입 모두 trend_window. N이면 추세 OFF 상태에서 지수가 N일 평균 위로 올라오면 다시 ON (빠른 재진입).", advanced=True),
+        Param("stress_days", 1, 1, 20, 1, "스트레스가 이 일수만큼 연속돼야 인정합니다(깜빡임 방지). 1=즉시.", advanced=True),
+        Param("daily_exposure", 1, 0, 1, 1, "1이면 노출을 매일 갱신, 0이면 종목 비중 갱신일(트랜치 날)에만 갱신.", advanced=True),
     ]
     multi_asset = True
 

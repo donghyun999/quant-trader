@@ -92,7 +92,7 @@ class VolTarget(Strategy):
     params = [
         Param("base", "trend_invvol", help="기반 전략 이름 (예: trend_invvol, momentum_ensemble, buy_hold)."),
         Param("target_vol", 0.15, 0.03, 0.30, 0.01, "목표 연 변동성. 10%는 한국 개별주처럼 변동성 큰 자산에, 15%는 범용."),
-        Param("window", 60, 20, 252, 10, "변동성 측정 기간(거래일)."),
+        Param("window", 60, 20, 252, 10, "변동성 측정 기간(거래일).", advanced=True),
     ]
     multi_asset = True
 
@@ -127,7 +127,7 @@ class Ensemble(Strategy):
     params = [
         Param("members", "tranched(base=trend_invvol),tranched(base=momentum_ensemble),buy_hold",
               help="쉼표로 구분한 전략 이름들. 괄호로 파라미터 지정 가능: tranched(base=trend_invvol)"),
-        Param("weights", "", help="멤버별 가중치 (쉼표 또는 | 구분, 예: 2,1,1). 비우면 균등."),
+        Param("weights", "", help="멤버별 가중치 (쉼표 또는 | 구분, 예: 2,1,1). 비우면 균등.", advanced=True),
     ]
     multi_asset = True
 
@@ -177,7 +177,7 @@ class Tranched(Strategy):
     params = [
         Param("base", "trend_invvol", help="기반 월간 전략 (trend_invvol, momentum_ensemble, dual_momentum)."),
         Param("n_tranches", 4, 1, 8, 1, "조각 수. 4면 월말, +5, +10, +15 거래일."),
-        Param("spacing", 5, 1, 10, 1, "조각 간 간격(거래일)."),
+        Param("spacing", 5, 1, 10, 1, "조각 간 간격(거래일).", advanced=True),
     ]
     multi_asset = True
 
@@ -216,7 +216,7 @@ class DrawdownControl(Strategy):
     params = [
         Param("base", "ensemble", help="기반 전략 스펙."),
         Param("dd_trigger", 0.10, 0.03, 0.30, 0.01, "이 낙폭을 넘으면 비중 축소."),
-        Param("scale", 0.5, 0.0, 1.0, 0.05, "축소 시 비중 배수."),
+        Param("scale", 0.5, 0.0, 1.0, 0.05, "축소 시 비중 배수.", advanced=True),
     ]
     multi_asset = True
 

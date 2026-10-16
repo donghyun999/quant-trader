@@ -257,12 +257,20 @@ def _live_schedule(trader, at: str, execute: bool) -> None:
 
 
 def cmd_live(args):
-    """실전 자동매매: check / run / status / stop / resume / schedule."""
-    from quant.config import PROJECT_ROOT, load_config
+    """실전 자동매매: doctor / check / run / status / stop / resume / schedule."""
+    from quant.config import PROJECT_ROOT, load_config, validate_config
     from quant.live import LiveTrader
 
     cfg = _live_apply_overrides(load_config(args.config), args)
     kill = PROJECT_ROOT / cfg.risk.kill_switch_file
+    if args.live_cmd == "doctor":
+        issues = validate_config(cfg)
+        src = args.config or "config.toml"
+        print(f"설정 점검 ({src}): 브로커 {cfg.broker}, 전략 {cfg.strategy}, 종목 {len(cfg.tickers)}개")
+        for i in issues:
+            print(" -", i)
+        print("문제 없음." if not issues else f"{len(issues)}건 확인 필요.")
+        return
     if args.live_cmd in ("stop", "resume"):
         return _live_kill_switch(args.live_cmd, kill)
     if args.live_cmd == "status":
@@ -358,6 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     lv.add_argument("--strategy", default="", help="설정 파일의 전략을 덮어씀")
     lv.add_argument("--broker", default="", choices=["", "paper", "kis"], help="설정 파일의 브로커를 덮어씀")
     ls = lv.add_subparsers(dest="live_cmd", required=True)
+    ls.add_parser("doctor", help="설정 파일 점검 (네트워크 없음)")
     ls.add_parser("check", help="브로커 연결/잔고/현재가 확인 (주문 없음)")
     lr = ls.add_parser("run", help="신호 계산 후 주문 (기본 dry-run)")
     lr.add_argument("--execute", action="store_true", help="실제로 주문을 전송한다")

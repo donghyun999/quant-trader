@@ -21,7 +21,7 @@ DEFAULT_CONFIG = PROJECT_ROOT / "config.toml"
 class LiveConfig:
     broker: str = "paper"              # "paper" | "kis"
     tickers: list[str] = field(default_factory=lambda: ["SPY", "QQQ", "TLT", "GLD"])
-    strategy: str = "dual_momentum"
+    strategy: str = "ensemble"
     params: dict[str, Any] = field(default_factory=dict)
     period: str = "2y"
     fee_pct: float = 0.0015
@@ -45,7 +45,7 @@ def load_config(path: str | Path | None = None) -> LiveConfig:
     cfg = LiveConfig(
         broker=str(live.get("broker", "paper")),
         tickers=[str(t).strip().upper() for t in live.get("tickers", LiveConfig().tickers) if str(t).strip()],
-        strategy=str(live.get("strategy", "dual_momentum")),
+        strategy=str(live.get("strategy", "ensemble")),
         params=dict(live.get("params", {})),
         period=str(live.get("period", "2y")),
         fee_pct=float(live.get("fee_pct", 0.0015)),
@@ -70,3 +70,48 @@ def load_config(path: str | Path | None = None) -> LiveConfig:
         if os.environ.get(env):
             cfg.kis[key] = os.environ[env]
     return cfg
+
+
+def validate_config(cfg: LiveConfig) -> list[str]:
+    """실전 설정의 흔한 실수를 점검해 한국어 문제 목록을 돌려준다 (비어 있으면 통과)."""
+    from .strategies import STRATEGIES
+
+    issues: list[str] = []
+    if cfg.broker not in ("paper", "kis"):
+        issues.append(f"broker 는 paper 또는 kis 여야 합니다: {cfg.broker}")
+    if not cfg.tickers:
+        issues.append("tickers 가 비어 있습니다.")
+    kr = [t for t in cfg.tickers if t.endswith((".KS", ".KQ"))]
+    if kr and len(kr) != len(cfg.tickers):
+        issues.append("국내와 해외 종목이 섞여 있습니다. 통화가 달라 현금 계산이 틀어지므로 설정을 나누세요.")
+    if cfg.strategy not in STRATEGIES:
+        issues.append(f"알 수 없는 전략: {cfg.strategy} (가능: {', '.join(STRATEGIES)})")
+    else:
+        try:
+            STRATEGIES[cfg.strategy](**cfg.params)
+        except Exception as e:  # noqa: BLE001
+            issues.append(f"전략 파라미터 오류: {e}")
+    if cfg.strategy in ("dual_momentum", "momentum_ensemble", "rsi_reversion", "bollinger"):
+        issues.append(f"[권고] {cfg.strategy} 단독은 평가 세트에서 낙폭이 벤치마크보다 큰 경우가 많았습니다. ensemble 을 권합니다.")
+    if cfg.broker == "kis":
+        k = cfg.kis
+        for key in ("app_key", "app_secret", "account_no"):
+            if not k.get(key):
+                issues.append(f"[kis] {key} 가 비어 있습니다 (환경변수 KIS_{key.upper()} 도 가능).")
+        acct = str(k.get("account_no", "")).replace("-", "")
+        if acct and len(acct) != 10:
+            issues.append("[kis] account_no 는 8자리-2자리(예: 12345678-01) 형식이어야 합니다.")
+        if k.get("mode", "vts") not in ("vts", "prod"):
+            issues.append("[kis] mode 는 vts 또는 prod 여야 합니다.")
+        if k.get("mode") == "prod" and cfg.risk.max_order_value <= 0:
+            issues.append("[권고] 실전(prod)인데 max_order_value 가 0(무제한)입니다. 1회 주문 한도를 두세요.")
+    r = cfg.risk
+    if not 0 < r.max_position_weight <= 1:
+        issues.append("risk.max_position_weight 는 0~1 사이여야 합니다.")
+    if not 0 < r.max_daily_loss_pct < 1:
+        issues.append("risk.max_daily_loss_pct 는 0~1 사이여야 합니다.")
+    if r.allowed_tickers and (set(cfg.tickers) - set(r.allowed_tickers)):
+        issues.append("tickers 중 risk.allowed_tickers 에 없는 종목이 있어 주문이 거부됩니다.")
+    if not 0 <= cfg.threshold < 0.5:
+        issues.append("threshold 는 0~0.5 사이가 정상입니다.")
+    return issues

@@ -95,7 +95,22 @@ def _clean(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     # 거래량 0 이고 시가=고가=저가=종가 인 행은 휴장일 잔재(거래 없음)로 보고 제거한다
     flat = (df["volume"] <= 0) & (df["open"] == df["close"]) & (df["high"] == df["low"])
     df = df[~flat]
+    glitches = detect_glitches(df["close"])
+    if len(glitches):
+        warnings.warn(f"{ticker}: 하루 만에 되돌아간 급등락(데이터 오류 의심) {len(glitches)}건: "
+                      f"{', '.join(str(d.date()) for d in glitches[:3])}{' ...' if len(glitches) > 3 else ''}")
     return df
+
+
+def detect_glitches(close: pd.Series, threshold: float = 0.5) -> pd.DatetimeIndex:
+    """하루에 ±threshold 이상 움직였다가 다음 날 거의 원위치로 돌아온 날짜 (잘못된 봉·미반영 분할 의심).
+
+    실제 급락 후 급반등과 구분하기 위해 '되돌림'이 전날 대비 ±10% 이내인 경우만 잡는다.
+    """
+    r = close.pct_change()
+    big = r.abs() > threshold
+    back = (close.shift(-1) / close.shift(1) - 1).abs() < 0.10
+    return close.index[(big & back).fillna(False).to_numpy()]
 
 
 def _download(ticker: str) -> pd.DataFrame:

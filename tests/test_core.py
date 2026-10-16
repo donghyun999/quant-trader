@@ -327,3 +327,11 @@ def test_cash_rate_accrues_on_idle_cash(make_fake_prices):
     r3 = run_backtest(AllCash(), prices, BacktestConfig(cash_rate=0.03))
     assert r0.equity.iloc[-1] == r0.equity.iloc[0]
     assert abs(r3.equity.iloc[-1] / r3.equity.iloc[0] - 1.03) < 0.002   # 252일 ≈ 1년 → 약 3%
+
+
+def test_detect_glitches():
+    from quant.data import detect_glitches
+    idx = pd.bdate_range("2024-01-01", periods=8)
+    close = pd.Series([100, 101, 102, 1020, 103, 104, 50, 51], index=idx, dtype=float)
+    g = detect_glitches(close)
+    assert list(g) == [idx[3]]          # 10배 뛰었다 돌아온 날만. 50 으로 떨어져 머문 건 실제 변화로 간주

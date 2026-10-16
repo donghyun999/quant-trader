@@ -393,6 +393,23 @@ with tabs[3]:
         if acc.orders:
             with st.expander("전체 주문 내역"):
                 st.dataframe(pd.DataFrame(acc.orders[::-1]), width="stretch")
+        if acc.history:
+            from quant.report import build_report  # noqa: E402
+
+            rep_m = build_report(acc)
+            with st.expander("월간 성과 리포트"):
+                mt = rep_m["monthly"]
+                if not mt.empty:
+                    st.dataframe(mt.rename(columns={"month": "월", "end_equity": "월말 자산", "return": "수익률",
+                                                    "max_drawdown": "월중 낙폭"})
+                                 .style.format({"월말 자산": "{:,.0f}", "수익률": "{:+.1%}", "월중 낙폭": "{:.1%}"}),
+                                 width="stretch")
+                ot = rep_m["orders"]
+                if not ot.empty:
+                    st.dataframe(ot.rename(columns={"month": "월", "orders": "주문 수", "buy_value": "매수 금액",
+                                                    "sell_value": "매도 금액", "fees": "수수료"})
+                                 .style.format({"매수 금액": "{:,.0f}", "매도 금액": "{:,.0f}", "수수료": "{:,.0f}"}),
+                                 width="stretch")
 
         with st.expander("계좌 초기화"):
             new_cash = st.number_input("새 초기 자금", 1_000_000, 10_000_000_000, int(acc.initial_cash), 1_000_000)
@@ -431,6 +448,23 @@ with tabs[4]:
 4. 파라미터를 조금 바꿔도 결과가 비슷해야 믿을 만합니다.
 5. 페이퍼 계좌로 몇 주~몇 달 지켜본 뒤 판단하세요.
 """)
+    lb_path = ROOT / "research" / "results" / "leaderboard.csv"
+    if lb_path.exists():
+        st.markdown("### 전략 평가 리더보드 (research/evaluate.py)")
+        st.caption("8개 종목 묶음 × 10년 워크포워드 기준 강건성 점수. 높을수록 처음 보는 구간에서도 벤치마크 대비 안정적이었다는 뜻이며, "
+                   "수익률 순위가 아닙니다. 자세한 정의와 회차별 기록은 research/LOG.md.")
+        try:
+            lb = pd.read_csv(lb_path)
+            cols = {"strategy": "전략", "robust_score": "강건성 점수", "oos_sharpe_mean": "OOS 샤프(평균)",
+                    "oos_beat_bench_frac": "OOS 벤치마크 이김", "oos_mdd_better_frac": "OOS 낙폭 개선",
+                    "bt10_cagr_mean": "10년 CAGR", "mdd_worst": "최악 MDD", "crisis_excess_mean": "위기 초과수익"}
+            show = lb[[c for c in cols if c in lb.columns]].rename(columns=cols)
+            show["전략"] = show["전략"].map(lambda n: f"{STRATEGIES[n].label} ({n})" if n in STRATEGIES else n)
+            st.dataframe(show.style.format({"강건성 점수": "{:.3f}", "OOS 샤프(평균)": "{:.2f}", "OOS 벤치마크 이김": "{:.0%}",
+                                            "OOS 낙폭 개선": "{:.0%}", "10년 CAGR": "{:.1%}", "최악 MDD": "{:.1%}",
+                                            "위기 초과수익": "{:+.1%}"}), width="stretch", hide_index=True)
+        except Exception as e:  # noqa: BLE001
+            st.caption(f"리더보드를 읽지 못했습니다: {e}")
     st.error("⚠️ " + DISCLAIMER)
 
 # ---------- ⑥ 실전 매매 ----------

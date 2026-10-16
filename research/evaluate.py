@@ -64,6 +64,7 @@ WF_GRIDS: dict[str, dict[str, list]] = {
     "tranched": {"n_tranches": [2, 4]},
     "dd_control": {"dd_trigger": [0.08, 0.12, 0.2]},
     "regime_guard": {"soft_exposure": [0.3, 0.5, 0.7]},
+    "invvol_hold": {"vol_window": [40, 60, 120]},
     "ensemble": {},
     "buy_hold": {},
 }
@@ -107,7 +108,10 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "me_skip21_top3": ("momentum_ensemble", {"skip_recent": 21, "top_n": 3}),
     "ens_me_skip21": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=momentum_ensemble(skip_recent=21)),buy_hold"}),
     "ens_me_top3": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=momentum_ensemble(top_n=3)),buy_hold"}),
-    "ens_me_skip21_top3": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=momentum_ensemble(skip_recent=21|top_n=3)),buy_hold"}),
+    "ens_me_skip21_top3": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=momentum_ensemble(skip_recent=21;top_n=3)),buy_hold"}),
+    "ih_fixed": ("invvol_hold", {"vol_window": 60}),
+    "ens_ih": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=momentum_ensemble),tranched(base=invvol_hold)"}),
+    "ens_ih_cap1": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=momentum_ensemble),tranched(base=invvol_hold(max_weight=1.0))"}),
     "ens2_tv+bh": ("ensemble", {"members": "tranched(base=trend_invvol),buy_hold"}),
     "ens2_rg+bh": ("ensemble", {"members": "tranched(base=regime_guard),buy_hold"}),
     "ens3_tv+rg+bh": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=regime_guard),buy_hold"}),
@@ -302,7 +306,7 @@ def score_table(rows: list[dict]) -> pd.DataFrame:
 
 
 def main(argv=None) -> int:
-    global WF_SPLITS
+    global WF_SPLITS, WF_PERIOD
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="5y + 핵심 유니버스 2개만 워크포워드")
     ap.add_argument("--strategies", default="", help="쉼표 구분. 기본 전체")
@@ -315,6 +319,7 @@ def main(argv=None) -> int:
     ap.add_argument("--cash-rate", type=float, default=0.0, help="현금 연 이자율 (예: 0.03)")
     ap.add_argument("--min-trade", type=float, default=0.02, help="백테스트 최소 거래 비중 차이 (live threshold 와 동일, 예: 0.02)")
     ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
+    ap.add_argument("--period", default=WF_PERIOD, help="데이터 기간 (기본 10y, 예: 7y, max). 시간 창 강건성 확인용")
     ap.add_argument("--universes", default="", help="쉼표 구분 유니버스 이름 (기본 전부)")
     ap.add_argument("--holdout", action="store_true", help="개발에 쓰지 않은 홀드아웃 유니버스만 평가")
     ap.add_argument("--baseline", default="", help="저장된 리더보드 CSV 와 비교해 robust_score 하락을 경고 (예: research/results/leaderboard.csv)")
@@ -328,6 +333,9 @@ def main(argv=None) -> int:
                          slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade, cash_rate=args.cash_rate)
     cfg._fee_override = args.fee  # None 이면 시장별 자동
     WF_SPLITS = args.splits
+    WF_PERIOD = args.period
+    if args.period != "10y" and not args.tag:
+        args.tag = f"period_{args.period}"
     pool = HOLDOUT_UNIVERSES if args.holdout else UNIVERSES
     unis = {u: t for u, t in pool.items() if not args.universes or u in args.universes.split(",")}
     if args.holdout and not args.tag:

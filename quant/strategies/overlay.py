@@ -37,7 +37,8 @@ def parse_spec(spec: str) -> tuple[str, dict]:
     """'trend_invvol' 또는 'trend_invvol(trend_window=100,max_weight=0.5)' -> (이름, 파라미터).
 
     중첩 허용: 'vol_target(base=ensemble(members=tranched(base=trend_invvol)|buy_hold))'.
-    앙상블 members 처럼 쉼표가 바깥 구분자로 쓰이는 곳에서는 파라미터 구분자로 '|' 도 허용한다.
+    파라미터 구분자는 ',' 또는 ';'. members 값 안에서는 멤버 구분자로 '|' 를 쓴다
+    (예: tranched(base=momentum_ensemble(skip_recent=21;top_n=3))).
     """
     spec = spec.strip()
     if "(" not in spec:
@@ -47,7 +48,7 @@ def parse_spec(spec: str) -> tuple[str, dict]:
         raise ValueError(f"괄호가 닫히지 않았습니다: {spec}")
     rest = rest[:-1].strip()
     params: dict = {}
-    for kv in _split_top(rest, ","):
+    for kv in _split_top(rest, ",;"):
         if "=" not in kv:
             raise ValueError(f"파라미터 형식 오류: {kv} (예: key=value)")
         k, v = (x.strip() for x in kv.split("=", 1))

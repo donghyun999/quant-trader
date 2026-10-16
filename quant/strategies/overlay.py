@@ -23,19 +23,19 @@ class VolTarget(Strategy):
     name = "vol_target"
     label = "변동성 목표 오버레이"
     description = (
-        "다른 전략(base)의 비중을 그대로 쓰되, 최근 포트폴리오 변동성이 목표(기본 연 10%)보다 크면 "
+        "다른 전략(base)의 비중을 그대로 쓰되, 최근 포트폴리오 변동성이 목표(기본 연 15%)보다 크면 "
         "전체 비중을 줄여 현금을 늘리고, 작으면 최대 100%까지만 투자합니다. "
         "수익을 키우는 장치가 아니라 손실 폭을 일정하게 묶어 두는 장치입니다."
     )
     params = [
         Param("base", "trend_invvol", help="기반 전략 이름 (예: trend_invvol, momentum_ensemble, buy_hold)."),
-        Param("target_vol", 0.10, 0.03, 0.30, 0.01, "목표 연 변동성."),
+        Param("target_vol", 0.15, 0.03, 0.30, 0.01, "목표 연 변동성. 10%는 한국 개별주처럼 변동성 큰 자산에, 15%는 범용."),
         Param("window", 60, 20, 252, 10, "변동성 측정 기간(거래일)."),
     ]
     multi_asset = True
 
     def validate(self) -> None:
-        if self.p["base"] not in _registry() or self.p["base"] in ("vol_target", "ensemble"):
+        if self.p["base"] not in _registry() or self.p["base"] == "vol_target":
             raise ValueError(f"base 전략 이름이 잘못됐습니다: {self.p['base']}")
         if self.p["target_vol"] <= 0 or self.p["window"] < 5:
             raise ValueError("target_vol 은 양수, window 는 5 이상이어야 합니다.")

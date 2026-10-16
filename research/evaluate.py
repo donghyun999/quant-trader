@@ -77,6 +77,18 @@ def crisis_excess(equity: pd.Series, bench: pd.Series) -> dict[str, float]:
 
 CFG = BacktestConfig(fee_pct=0.0015, slippage_pct=0.0005)
 
+# 변형: 라벨 -> (전략 이름, 고정 파라미터). --variants 로 포함. 워크포워드는 고정 파라미터만 사용(격자 없음).
+VARIANTS: dict[str, tuple[str, dict]] = {
+    "ens_tv+bh": ("ensemble", {"members": "trend_invvol,buy_hold"}),
+    "ens_tv+me": ("ensemble", {"members": "trend_invvol,momentum_ensemble"}),
+    "ens_all4": ("ensemble", {"members": "trend_invvol,momentum_ensemble,dual_momentum,buy_hold"}),
+    "ens_tv+me+dm": ("ensemble", {"members": "trend_invvol,momentum_ensemble,dual_momentum"}),
+    "vt15_tv": ("vol_target", {"base": "trend_invvol", "target_vol": 0.15}),
+    "vt12_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.12}),
+    "vt15_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.15}),
+    "vt15_bh": ("vol_target", {"base": "buy_hold", "target_vol": 0.15}),
+}
+
 
 def _f(x) -> float:
     try:
@@ -86,9 +98,20 @@ def _f(x) -> float:
         return float("nan")
 
 
-def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick: bool) -> list[dict]:
-    """한 전략을 모든 유니버스/기간에 대해 평가. 행 단위 결과 반환."""
-    cls = STRATEGIES[name]
+def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick: bool,
+                      cfg: BacktestConfig = CFG, fixed: dict | None = None,
+                      grid: dict | None = None, cls=None) -> list[dict]:
+    """한 전략(또는 변형)을 모든 유니버스/기간에 대해 평가. 행 단위 결과 반환.
+
+    name: 결과 라벨. cls: 전략 클래스(None 이면 STRATEGIES[name]). fixed: 고정 파라미터.
+    grid: 워크포워드 격자(None 이면 WF_GRIDS[name], 고정 파라미터는 단일값 격자로 합쳐짐).
+    """
+    cls = cls or STRATEGIES[name]
+    fixed = fixed or {}
+    if grid is None:
+        grid = WF_GRIDS.get(name, {})
+    grid = {**grid, **{k: [v] for k, v in fixed.items()}}
+    CFG_ = cfg
     rows: list[dict] = []
     for uni, prices10 in data.items():
         if cls.multi_asset and len(prices10) == 1 and name == "dual_momentum":
@@ -99,7 +122,7 @@ def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick
             if not prices:
                 continue
             try:
-                res = run_backtest(cls(), prices, CFG)
+                res = run_backtest(cls(**fixed), prices, CFG_)
             except Exception as e:  # noqa: BLE001
                 rows.append({"strategy": name, "universe": uni, "kind": f"bt_{period}", "error": str(e)})
                 continue
@@ -116,9 +139,8 @@ def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick
         # 워크포워드 (OOS)
         if quick and uni not in ("us_etf4", "kr_large4"):
             continue
-        grid = WF_GRIDS.get(name, {})
         try:
-            wf = walk_forward(cls, prices10, grid, CFG, n_splits=WF_SPLITS)
+            wf = walk_forward(cls, prices10, grid, CFG_, n_splits=WF_SPLITS)
             om = wf["oos_metrics"]
             folds = wf["folds"]
             rows.append({
@@ -196,8 +218,16 @@ def main(argv=None) -> int:
     ap.add_argument("--quick", action="store_true", help="5y + 핵심 유니버스 2개만 워크포워드")
     ap.add_argument("--strategies", default="", help="쉼표 구분. 기본 전체")
     ap.add_argument("--out", default=str(ROOT / "research" / "results"))
+    ap.add_argument("--variants", action="store_true", help="VARIANTS(고정 파라미터 변형)도 포함")
+    ap.add_argument("--only-variants", action="store_true", help="VARIANTS 만 평가")
+    ap.add_argument("--variant-names", default="", help="쉼표 구분 변형 라벨 (기본 전부)")
+    ap.add_argument("--fee", type=float, default=0.0015, help="편도 수수료 (기본 0.0015)")
+    ap.add_argument("--tag", default="", help="결과 파일 접미사 (예: fee2x)")
     args = ap.parse_args(argv)
     names = [s for s in args.strategies.split(",") if s] or list(STRATEGIES)
+    if args.only_variants:
+        names = []
+    cfg = BacktestConfig(fee_pct=args.fee, slippage_pct=CFG.slippage_pct)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -205,19 +235,24 @@ def main(argv=None) -> int:
     print("데이터 로드...")
     data = {u: get_prices(tk, period=WF_PERIOD) for u, tk in UNIVERSES.items()}
     rows: list[dict] = []
-    for n in names:
+    jobs = [(n, None, None) for n in names]
+    if args.variants or args.only_variants:
+        wanted = [v for v in args.variant_names.split(",") if v] or list(VARIANTS)
+        jobs += [(label, STRATEGIES[sn], fixed) for label, (sn, fixed) in VARIANTS.items() if label in wanted]
+    for n, vcls, fixed in jobs:
         t1 = time.time()
-        r = evaluate_strategy(n, data, args.quick)
+        r = evaluate_strategy(n, data, args.quick, cfg=cfg, fixed=fixed, grid=({} if vcls else None), cls=vcls)
         rows.extend(r)
         errs = [x for x in r if "error" in x]
         print(f"  {n:<24} {len(r):>3} evals  {time.time() - t1:5.1f}s" + (f"  오류 {len(errs)}: {errs[0]['error'][:60]}" if errs else ""))
     table = score_table(rows)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     (out_dir / f"runs_{stamp}.json").write_text(json.dumps(rows, ensure_ascii=False, default=str, indent=1), encoding="utf-8")
-    lb_path = out_dir / "leaderboard.csv"
+    suffix = f"_{args.tag}" if args.tag else ""
+    lb_path = out_dir / f"leaderboard{suffix}.csv"
     table.to_csv(lb_path, index=False, encoding="utf-8-sig")
     # 상세(유니버스별) 표
-    pd.DataFrame([r for r in rows if "error" not in r]).to_csv(out_dir / "detail_latest.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame([r for r in rows if "error" not in r]).to_csv(out_dir / f"detail_latest{suffix}.csv", index=False, encoding="utf-8-sig")
 
     pd.set_option("display.width", 200)
     cols = ["strategy", "robust_score", "oos_sharpe_mean", "oos_sharpe_min", "oos_beat_bench_frac",

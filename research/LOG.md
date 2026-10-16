@@ -583,3 +583,11 @@ vt15_ens 는 2023- 구간에서 -126%p (한국 대형주 급등을 변동성 목
 - 균형: `vol_target(base=ensemble, target_vol=0.15)`
 - 방어: `dd_control(base=ensemble, dd_trigger=0.15)`
 - 보수: `vol_target(base=ensemble, target_vol=0.12)`
+
+---
+
+## 회차 19 — 2026-10-16 (기준선 갱신)
+
+- 전체 리더보드·`baseline_full.csv`, 홀드아웃 리더보드를 dd_control 포함 전 전략(11개)으로 갱신.
+- 개발: ensemble 0.930 > dd_control 0.924 > tranched 0.821 > vol_target 0.727. 홀드아웃: dd_control 0.918 ≈ ensemble 0.911 > tranched 0.786.
+- 두 세트 모두 상위 2개는 같은 가족(앙상블, 앙상블+낙폭제어). dual_momentum 은 개발 묶음에서 최하위(0.293, 최악 MDD -68%)로, README 의 "듀얼 모멘텀" 설명에 집중 위험 경고를 추가할 가치가 있다.

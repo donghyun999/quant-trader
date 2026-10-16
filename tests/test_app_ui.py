@@ -1,7 +1,6 @@
 """Streamlit 대시보드 스모크 테스트 (AppTest, 합성 데이터, 네트워크 없음)."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest

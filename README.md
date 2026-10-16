@@ -125,24 +125,27 @@ Windows 작업 스케줄러에 `run_live.bat --execute --yes` 를 등록해도 �
 ## 프로젝트 구조
 
 ```
-app.py              Streamlit 대시보드
-cli.py              명령줄 도구
-run.bat             Windows 실행 파일
+app.py              Streamlit 대시보드 (6탭: 백테스트/탐색/신호/페이퍼/도움말/실전)
+cli.py              명령줄 도구 (backtest, signal, paper, report, live, strategies)
+run.bat             대시보드 실행 / run_live.bat 실전 1회 실행(기본 dry-run)
+config.example.toml 실전 설정 예시 (config.toml 로 복사, git 제외)
 quant/
-  data.py           가격 데이터 (yfinance, parquet 캐시)
-  indicators.py     지표(SMA, RSI 등)
-  strategies/       전략 모음
-  backtest.py       백테스트 엔진
+  data.py           가격 데이터 (yfinance, parquet 캐시, 마지막 거래일 기준 신선도 판정)
+  indicators.py     지표(SMA, RSI, 볼린저, 모멘텀 등)
+  strategies/       전략 (단일: sma_cross, rsi_reversion, bollinger / 다종목: dual_momentum,
+                    momentum_ensemble, trend_invvol / 오버레이: tranched, vol_target, dd_control, ensemble)
+  backtest.py       백테스트 엔진 (다음날 체결, 수수료·슬리피지, 손절, 최소 거래 필터, 현금 이자)
   metrics.py        성과 지표와 쉬운 말 설명
   optimize.py       파라미터 탐색, 워크포워드
   signals.py        오늘의 신호
   paper.py          페이퍼 계좌 (paper_account.json)
-  broker/           브로커 인터페이스 (paper, kis)
-  risk.py           실전 리스크 가드
-  live.py           실전 실행기
+  report.py         월간 성과 리포트
+  broker/           브로커 인터페이스 (paper, kis=한국투자증권)
+  risk.py           실전 리스크 가드 (비중·금액·주문 수·일일 손실·킬 스위치)
+  live.py           실전 실행기 (신호→주문 계획→리스크 가드→전송→live_log)
   config.py         config.toml 로더
-config.example.toml 실전 설정 예시 (config.toml 로 복사)
-run_live.bat        실전 1회 실행 (기본 dry-run)
-tests/              테스트 (pytest)
+research/           전략 평가 세트(evaluate.py), 실행기 재현 검증(replay_live.py), 개발 기록(LOG.md), 리더보드
+docs/KIS_SETUP.md   한국투자증권 모의투자 연결 체크리스트
+tests/              pytest (전략·엔진·실전·UI 스모크·실행기 재현)
 outputs/            백테스트 결과 CSV
 ```

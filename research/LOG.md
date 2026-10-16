@@ -602,3 +602,11 @@ vt15_ens 는 2023- 구간에서 -126%p (한국 대형주 급등을 변동성 목
 
 ### 배운 것
 - 파이썬으로 소스 파일을 다시 쓸 때 문자열 안의 `\n` 이 실제 줄바꿈으로 바뀌는 사고가 또 났다(회차 14와 동일). 소스 생성 후 `ast.parse` 로 즉시 검사하는 습관을 루프 규칙에 추가한다.
+
+---
+
+## 회차 21 — 2026-10-16 (코드 건강 점검)
+
+- pyflakes 전 모듈 점검: 미사용 변수/임포트 6건 정리(backtest `h`, live `Any`, overlay `reg`, 테스트 3건). 정의되지 않은 이름·논리 오류 없음.
+- README 프로젝트 구조를 현재 모듈 전체(오버레이 전략, broker/risk/live/config/report, research/, docs/)로 갱신.
+- 20회차 동안 추가된 코드가 많았지만 린트 결과가 가벼운 것은 매 회차 pytest + 평가 하네스를 돌린 덕. 앞으로 `python -m pyflakes quant cli.py app.py research tests` 를 커밋 전 체크에 포함.

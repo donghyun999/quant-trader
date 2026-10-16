@@ -97,7 +97,7 @@ def _simulate(
     """target: sim_idx 에 맞춰 이미 shift(1) 된 목표 비중 (해당 날짜에 체결할 비중)."""
     T, N = len(sim_idx), len(tickers)
     tgt = target.to_numpy(dtype=float)
-    o, h, l, c = px["open"], px["high"], px["low"], px["close"]
+    o, l, c = px["open"], px["low"], px["close"]
     exec_on_open = cfg.execution == "next_open"
     exec_px = o if exec_on_open else c
     fee, slip = float(cfg.fee_pct), float(cfg.slippage_pct)

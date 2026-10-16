@@ -155,7 +155,6 @@ class Ensemble(Strategy):
         aligned = align_prices(prices)
         idx = common_index(prices)
         tickers = list(aligned)
-        reg = _registry()
         total = None
         names = self._members()
         wts = self._weights() or [1.0] * len(names)

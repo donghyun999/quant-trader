@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -277,7 +276,7 @@ def test_kis_price_and_order_kr(kis):
     call = s.calls[-1]
     assert call["headers"]["tr_id"] == ENDPOINTS["kr_order"]["tr"][("vts", "BUY")]
     assert call["body"]["PDNO"] == "005930" and call["body"]["ORD_DVSN"] == "01" and call["body"]["ORD_QTY"] == "3"
-    r2 = b.submit_order("005930.KS", "SELL", 2, price=70000)
+    b.submit_order("005930.KS", "SELL", 2, price=70000)
     assert s.calls[-1]["body"]["ORD_DVSN"] == "00" and s.calls[-1]["body"]["ORD_UNPR"] == "70000"
     assert s.calls[-1]["headers"]["tr_id"] == ENDPOINTS["kr_order"]["tr"][("vts", "SELL")]
 

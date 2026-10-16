@@ -256,3 +256,13 @@ def test_walk_forward(make_fake_prices):
     assert eq.iloc[0] == pytest.approx(10_000_000, rel=0.01)
     assert isinstance(out["warning"], str) and out["warning"]
     assert "sharpe" in out["oos_metrics"]
+
+
+def test_min_trade_weight_reduces_trades(make_fake_prices):
+    from quant.backtest import BacktestConfig, run_backtest
+    prices = make_fake_prices(n_days=800, tickers=("AAA", "BBB", "CCC"))
+    base = run_backtest("ensemble", prices, BacktestConfig())
+    filt = run_backtest("ensemble", prices, BacktestConfig(min_trade_weight=0.02))
+    assert len(filt.trades) < len(base.trades)
+    # 완전 청산은 필터와 무관하게 실행되어야 한다: 마지막 날 보유 비중이 목표 0 인 종목은 없어야 함
+    assert abs(filt.equity.iloc[-1] / base.equity.iloc[-1] - 1) < 0.2

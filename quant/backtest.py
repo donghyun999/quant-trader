@@ -33,6 +33,7 @@ class BacktestConfig:
     rebalance: str = "daily"           # "daily" | "weekly" | "monthly"
     stop_loss_pct: float | None = None  # 예: 0.1 = 진입가 대비 -10% 손절
     execution: str = "next_open"       # "next_open" | "next_close"
+    min_trade_weight: float = 0.0      # 목표 비중과 현재 비중 차이가 이보다 작으면 매매 생략 (완전 청산은 예외). live 의 threshold 와 동일 역할
 
 
 @dataclass
@@ -100,6 +101,7 @@ def _simulate(
     exec_px = o if exec_on_open else c
     fee, slip = float(cfg.fee_pct), float(cfg.slippage_pct)
     sl = cfg.stop_loss_pct if (use_stop and cfg.stop_loss_pct) else None
+    min_trade = float(cfg.min_trade_weight or 0.0)
     rebal = _rebalance_mask(sim_idx, cfg.rebalance)
 
     cash = float(cfg.initial_cash)
@@ -156,10 +158,16 @@ def _simulate(
             p = exec_px[t]
             tradable = ~np.isnan(p) & (p > 0)
             changed = tradable & (np.abs(eff - last_target) > 1e-9)
+            mark = np.where(tradable, p, last_close)
+            mark = np.nan_to_num(mark, nan=0.0)
+            E = cash + float(np.sum(qty * mark))
+            if min_trade > 0 and changed.any() and E > 0:
+                cur_w = qty * mark / E
+                small = (np.abs(eff - cur_w) < min_trade) & ~((eff <= 0) & (qty > 0))
+                # 작은 변화는 건너뛰되, 목표는 반영한 것으로 간주해 매일 재시도하지 않게 한다
+                last_target[changed & small] = eff[changed & small]
+                changed &= ~small
             if changed.any():
-                mark = np.where(tradable, p, last_close)
-                mark = np.nan_to_num(mark, nan=0.0)
-                E = cash + float(np.sum(qty * mark))
                 desired = qty.copy()
                 for i in np.flatnonzero(changed):
                     unit_cost = p[i] * (1.0 + slip) * (1.0 + fee)

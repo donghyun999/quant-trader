@@ -78,7 +78,7 @@ def crisis_excess(equity: pd.Series, bench: pd.Series) -> dict[str, float]:
         out[name] = float((e.iloc[-1] / e.iloc[0] - 1) - (bb.iloc[-1] / bb.iloc[0] - 1))
     return out
 
-CFG = BacktestConfig(fee_pct=0.0015, slippage_pct=0.0005)
+CFG = BacktestConfig(fee_pct=0.0015, slippage_pct=0.0005, min_trade_weight=0.02)  # min_trade = live threshold 와 동일
 
 # 변형: 라벨 -> (전략 이름, 고정 파라미터). --variants 로 포함. 워크포워드는 고정 파라미터만 사용(격자 없음).
 VARIANTS: dict[str, tuple[str, dict]] = {
@@ -87,13 +87,19 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "ens_all4": ("ensemble", {"members": "trend_invvol,momentum_ensemble,dual_momentum,buy_hold"}),
     "ens_tv+me+dm": ("ensemble", {"members": "trend_invvol,momentum_ensemble,dual_momentum"}),
     "vt15_tv": ("vol_target", {"base": "trend_invvol", "target_vol": 0.15}),
-    "vt12_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.12}),
-    "vt15_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.15}),
     "vt15_bh": ("vol_target", {"base": "buy_hold", "target_vol": 0.15}),
     "tr_tv": ("tranched", {"base": "trend_invvol"}),
     "tr_me": ("tranched", {"base": "momentum_ensemble"}),
     "tr_dm": ("tranched", {"base": "dual_momentum"}),
     "ens_untranched": ("ensemble", {"members": "trend_invvol,momentum_ensemble,buy_hold"}),
+    "tr_tv_n2": ("tranched", {"base": "trend_invvol", "n_tranches": 2, "spacing": 10}),
+    "tr_tv_n4s3": ("tranched", {"base": "trend_invvol", "n_tranches": 4, "spacing": 3}),
+    "tr_tv_n4s7": ("tranched", {"base": "trend_invvol", "n_tranches": 4, "spacing": 7}),
+    "tr_tv_n8s2": ("tranched", {"base": "trend_invvol", "n_tranches": 8, "spacing": 2}),
+    "tr_me_n2": ("tranched", {"base": "momentum_ensemble", "n_tranches": 2, "spacing": 10}),
+    "tr_me_n8s2": ("tranched", {"base": "momentum_ensemble", "n_tranches": 8, "spacing": 2}),
+    "vt15_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.15}),
+    "vt12_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.12}),
     "ens_tr_tv+bh": ("ensemble", {"members": "tranched(base=trend_invvol),buy_hold"}),
 }
 
@@ -232,13 +238,14 @@ def main(argv=None) -> int:
     ap.add_argument("--variant-names", default="", help="쉼표 구분 변형 라벨 (기본 전부)")
     ap.add_argument("--fee", type=float, default=0.0015, help="편도 수수료 (기본 0.0015)")
     ap.add_argument("--tag", default="", help="결과 파일 접미사 (예: fee2x)")
+    ap.add_argument("--min-trade", type=float, default=0.02, help="백테스트 최소 거래 비중 차이 (live threshold 와 동일, 예: 0.02)")
     ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
     ap.add_argument("--universes", default="", help="쉼표 구분 유니버스 이름 (기본 전부)")
     args = ap.parse_args(argv)
     names = [s for s in args.strategies.split(",") if s] or list(STRATEGIES)
     if args.only_variants:
         names = []
-    cfg = BacktestConfig(fee_pct=args.fee, slippage_pct=CFG.slippage_pct)
+    cfg = BacktestConfig(fee_pct=args.fee, slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade)
     WF_SPLITS = args.splits
     unis = {u: t for u, t in UNIVERSES.items() if not args.universes or u in args.universes.split(",")}
     out_dir = Path(args.out)

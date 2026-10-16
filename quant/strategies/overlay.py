@@ -15,25 +15,49 @@ def _registry():
     return STRATEGIES
 
 
+def _split_top(text: str, seps: str) -> list[str]:
+    """괄호 깊이 0 인 위치의 구분자로만 분리."""
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch in seps and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return [x for x in out if x]
+
+
 def parse_spec(spec: str) -> tuple[str, dict]:
     """'trend_invvol' 또는 'trend_invvol(trend_window=100,max_weight=0.5)' -> (이름, 파라미터).
 
+    중첩 허용: 'vol_target(base=ensemble(members=tranched(base=trend_invvol)|buy_hold))'.
     앙상블 members 처럼 쉼표가 바깥 구분자로 쓰이는 곳에서는 파라미터 구분자로 '|' 도 허용한다.
     """
     spec = spec.strip()
     if "(" not in spec:
         return spec, {}
     name, rest = spec.split("(", 1)
-    rest = rest.rstrip(")").strip()
+    if not rest.endswith(")"):
+        raise ValueError(f"괄호가 닫히지 않았습니다: {spec}")
+    rest = rest[:-1].strip()
     params: dict = {}
-    for kv in filter(None, (x.strip() for x in re.split(r"[,|]", rest))):
+    for kv in _split_top(rest, ","):
         if "=" not in kv:
             raise ValueError(f"파라미터 형식 오류: {kv} (예: key=value)")
         k, v = (x.strip() for x in kv.split("=", 1))
-        try:
-            params[k] = int(v) if re.fullmatch(r"-?\d+", v) else float(v)
-        except ValueError:
-            params[k] = v
+        if re.fullmatch(r"-?\d+", v):
+            params[k] = int(v)
+        else:
+            try:
+                params[k] = float(v)
+            except ValueError:
+                params[k] = v
     return name.strip(), params
 
 
@@ -46,21 +70,8 @@ def build(spec: str) -> Strategy:
 
 
 def split_members(text: str) -> list[str]:
-    """최상위 쉼표로만 분리 (괄호 안 쉼표는 보존)."""
-    out, depth, cur = [], 0, ""
-    for ch in str(text):
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-        if ch == "," and depth == 0:
-            out.append(cur.strip())
-            cur = ""
-        else:
-            cur += ch
-    if cur.strip():
-        out.append(cur.strip())
-    return [m for m in out if m]
+    """최상위 쉼표 또는 '|' 로만 분리 (괄호 안은 보존). 중첩 스펙 안에서는 '|' 를 쓴다."""
+    return _split_top(str(text), ",|")
 
 
 def _portfolio_returns(weights: pd.DataFrame, close: pd.DataFrame) -> pd.Series:

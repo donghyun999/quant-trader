@@ -268,6 +268,9 @@ def main(argv=None) -> int:
     ap.add_argument("--min-trade", type=float, default=0.02, help="백테스트 최소 거래 비중 차이 (live threshold 와 동일, 예: 0.02)")
     ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
     ap.add_argument("--universes", default="", help="쉼표 구분 유니버스 이름 (기본 전부)")
+    ap.add_argument("--baseline", default="", help="저장된 리더보드 CSV 와 비교해 robust_score 하락을 경고 (예: research/results/leaderboard.csv)")
+    ap.add_argument("--save-baseline", default="", help="이번 결과를 기준선 CSV 로 저장")
+    ap.add_argument("--tolerance", type=float, default=0.03, help="기준선 대비 허용 하락폭")
     args = ap.parse_args(argv)
     names = [s for s in args.strategies.split(",") if s] or list(STRATEGIES)
     if args.only_variants:
@@ -297,7 +300,8 @@ def main(argv=None) -> int:
     table = score_table(rows)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     (out_dir / f"runs_{stamp}.json").write_text(json.dumps(rows, ensure_ascii=False, default=str, indent=1), encoding="utf-8")
-    suffix = f"_{args.tag}" if args.tag else ""
+    tag = args.tag or ("quick" if args.quick else "")
+    suffix = f"_{tag}" if tag else ""
     lb_path = out_dir / f"leaderboard{suffix}.csv"
     table.to_csv(lb_path, index=False, encoding="utf-8-sig")
     # 상세(유니버스별) 표
@@ -309,6 +313,29 @@ def main(argv=None) -> int:
     print("\n=== 리더보드 (robust_score 내림차순) ===")
     print(table[cols].round(3).to_string(index=False))
     print(f"\n총 {len(rows)} evals, {time.time() - t0:.0f}s. 저장: {lb_path}")
+    rc = 0
+    if args.baseline:
+        rc = compare_baseline(table, Path(args.baseline), args.tolerance)
+    if args.save_baseline:
+        table.to_csv(args.save_baseline, index=False, encoding="utf-8-sig")
+        print(f"기준선 저장: {args.save_baseline}")
+    return rc
+
+
+def compare_baseline(table: pd.DataFrame, path: Path, tol: float) -> int:
+    """기준선 대비 robust_score 가 tol 이상 떨어진 전략이 있으면 경고하고 1 반환 (회귀 가드)."""
+    if not path.exists():
+        print(f"기준선 파일이 없습니다: {path}")
+        return 0
+    base = pd.read_csv(path).set_index("strategy")["robust_score"]
+    cur = table.set_index("strategy")["robust_score"]
+    worse = [f"{n}: {b:.3f} → {cur[n]:.3f}" for n, b in base.items() if n in cur.index and cur[n] < b - tol]
+    if worse:
+        print("\n[회귀 경고] 기준선보다 robust_score 가 떨어진 전략:")
+        for w in worse:
+            print("  -", w)
+        return 1
+    print(f"\n회귀 없음 (허용 하락폭 {tol}).")
     return 0
 
 

@@ -265,6 +265,23 @@ def cmd_live(args):
                 print(f" 실행 오류: {e}")
 
 
+def cmd_report(args):
+    from quant.config import PROJECT_ROOT, load_config
+    from quant.paper import PaperAccount
+    from quant.report import build_report, format_report_korean
+
+    acc = PaperAccount(args.file)
+    cfg = load_config(args.config)
+    rep = build_report(acc, PROJECT_ROOT / cfg.log_dir)
+    print(format_report_korean(rep))
+    if args.csv:
+        out = PROJECT_ROOT / "outputs"
+        out.mkdir(exist_ok=True)
+        rep["monthly"].to_csv(out / "report_monthly.csv", index=False, encoding="utf-8-sig")
+        rep["orders"].to_csv(out / "report_orders.csv", index=False, encoding="utf-8-sig")
+        print(f"CSV 저장: {out / 'report_monthly.csv'}, {out / 'report_orders.csv'}")
+
+
 def cmd_strategies(_args):
     from quant.strategies import STRATEGIES
 
@@ -311,6 +328,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("strategies", help="전략 목록")
     st.set_defaults(func=cmd_strategies)
+
+    rp = sub.add_parser("report", help="월간 성과 리포트 (페이퍼 계좌 + 실전 로그)")
+    rp.add_argument("--file", default="paper_account.json", help="계좌 파일 경로")
+    rp.add_argument("--config", default=None)
+    rp.add_argument("--csv", action="store_true", help="outputs/ 에 CSV 저장")
+    rp.set_defaults(func=cmd_report)
 
     lv = sub.add_parser("live", help="실전 자동매매 (config.toml 기반, 기본 dry-run)")
     lv.add_argument("--config", default=None, help="설정 파일 (기본 config.toml)")

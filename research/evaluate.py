@@ -101,6 +101,10 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "tr_me": ("tranched", {"base": "momentum_ensemble"}),
     "tr_dm": ("tranched", {"base": "dual_momentum"}),
     "ens_untranched": ("ensemble", {"members": "trend_invvol,momentum_ensemble,buy_hold"}),
+    "ens2_tv+bh": ("ensemble", {"members": "tranched(base=trend_invvol),buy_hold"}),
+    "ens2_rg+bh": ("ensemble", {"members": "tranched(base=regime_guard),buy_hold"}),
+    "ens3_tv+rg+bh": ("ensemble", {"members": "tranched(base=trend_invvol),tranched(base=regime_guard),buy_hold"}),
+    "ens3_tv+me+bh": ("ensemble", {}),   # 현 기본 구성 (비교 기준)
     "tv_mkt": ("trend_invvol", {"market_filter": 1}),
     "rg_fixed": ("regime_guard", {"soft_exposure": 0.5}),    # 격자 없이 기본값 고정 (trend_invvol 과 공정 비교용)
     "rg_stress": ("regime_guard", {"use_stress": 1}),

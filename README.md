@@ -52,7 +52,7 @@ python cli.py report                 # 월간 성과 리포트 (페이퍼 계좌
 - **낙폭 제어 오버레이 (dd_control)**: 기반 전략의 자산이 고점 대비 일정 비율(기본 10%) 넘게 빠져 있는 동안 비중을 절반으로 줄입니다. 수익을 약간 내주고 최악 낙폭을 더 줄이는 방어형 옵션.
 - **전략 앙상블 (ensemble)**: 여러 전략의 목표 비중을 평균합니다. 기본 구성은 분할 리밸런스한 추세필터 + 모멘텀 앙상블 + 단순 보유이며, 평가 세트(`research/`)에서 가장 강건했던 방식입니다.
 
-전략 평가 세트와 개발 기록은 `research/LOG.md`, 실행은 `python -X utf8 research/evaluate.py` 입니다.
+전략 평가의 **최종 보고서는 [research/REPORT.md](research/REPORT.md)**, 회차별 기록은 `research/LOG.md`, 실행은 `python -X utf8 research/evaluate.py` 입니다.
 
 정확한 목록과 설정값은 `python cli.py strategies`로 확인하세요.
 

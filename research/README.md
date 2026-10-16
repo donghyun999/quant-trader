@@ -4,6 +4,7 @@
 |---|---|
 | `evaluate.py` | 평가 세트. 8개 개발 묶음(+4개 홀드아웃) × 3·5·10년 × 10년 워크포워드로 전 전략을 돌려 `robust_score` 리더보드 생성 |
 | `replay_live.py` | 실전 실행기를 과거 N일 하루씩 재현해 백테스트와 일치하는지 검증(실데이터, 수동) |
+| `REPORT.md` | **최종 보고서**: 결론, 리더보드, 채택/기각 실험 목록, 교훈, 실전 후보 |
 | `LOG.md` | 회차별 실험·결과·배운 것. 전략 기본값이 왜 그렇게 정해졌는지의 근거 |
 | `results/leaderboard.csv` | 최신 전체 리더보드 (대시보드 ⑤ 도움말 탭에 표시) |
 | `results/leaderboard_*.csv` | 변형·민감도 실험 결과(태그별) |
@@ -16,6 +17,7 @@
 python -X utf8 research/evaluate.py                       # 전체 (약 2분)
 python -X utf8 research/evaluate.py --quick --baseline research/results/baseline_quick.csv   # 회귀 확인 (약 35초)
 python -X utf8 research/evaluate.py --holdout             # 개발에 안 쓴 묶음으로 검증
+python -X utf8 research/evaluate.py --period max          # 시간 창 강건성 (미국 2004~)
 python -X utf8 research/evaluate.py --variants --variant-names ens_w211,tv_mkt --tag mytest   # 고정 파라미터 변형
 python -X utf8 research/evaluate.py --cash-rate 0.03 --tag cash3                              # 현금 이자 가정
 python -X utf8 research/replay_live.py --days 120         # 실행기 재현 검증

@@ -92,6 +92,9 @@ def _clean(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     df.index.name = "date"
     df = df[~df.index.duplicated(keep="last")].sort_index()
     df = df.dropna(subset=["close"])
+    # 거래량 0 이고 시가=고가=저가=종가 인 행은 휴장일 잔재(거래 없음)로 보고 제거한다
+    flat = (df["volume"] <= 0) & (df["open"] == df["close"]) & (df["high"] == df["low"])
+    df = df[~flat]
     return df
 
 

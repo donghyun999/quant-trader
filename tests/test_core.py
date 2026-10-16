@@ -266,3 +266,15 @@ def test_min_trade_weight_reduces_trades(make_fake_prices):
     assert len(filt.trades) < len(base.trades)
     # 완전 청산은 필터와 무관하게 실행되어야 한다: 마지막 날 보유 비중이 목표 0 인 종목은 없어야 함
     assert abs(filt.equity.iloc[-1] / base.equity.iloc[-1] - 1) < 0.2
+
+
+def test_clean_drops_flat_zero_volume_rows():
+    from quant.data import _clean
+    idx = pd.bdate_range("2024-01-01", periods=4)
+    raw = pd.DataFrame({
+        "Open": [10, 11, 11, 12], "High": [10.5, 11, 11.5, 12.5], "Low": [9.5, 11, 10.5, 11.5],
+        "Close": [10, 11, 11, 12], "Volume": [100, 0, 0, 100],
+    }, index=idx)
+    out = _clean(raw, "X")
+    assert len(out) == 3                      # 2번째 행(거래량 0 + 평평한 봉)만 제거
+    assert idx[1] not in out.index and idx[2] in out.index

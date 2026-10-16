@@ -204,9 +204,10 @@ with tabs[1]:
     st.subheader("파라미터 탐색")
     st.warning("⚠️ 과거 데이터에 가장 잘 맞는 값을 고르면 '과최적화'가 되어, 미래에는 오히려 성과가 나쁠 수 있습니다. "
                "아래 워크포워드 결과(처음 보는 구간에서의 성과)를 꼭 함께 확인하세요.")
-    plist = scls.params
+    plist = [p for p in scls.params
+             if isinstance(p.default, (int, float)) and not isinstance(p.default, bool)]
     if not plist:
-        st.info("이 전략은 조정할 파라미터가 없습니다.")
+        st.info("이 전략은 숫자로 탐색할 파라미터가 없습니다. (문자열 파라미터는 사이드바에서 직접 바꿔 비교하세요.)")
     else:
         pnames = [p.name for p in plist]
         chosen = st.multiselect("탐색할 파라미터 (1~2개)", pnames, default=pnames[:1], max_selections=2)

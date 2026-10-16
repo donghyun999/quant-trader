@@ -91,6 +91,18 @@ def tranche_calendar(idx: pd.DatetimeIndex, n_tranches: int = 4, spacing: int = 
     return hits, nxt
 
 
+def next_run_time(now: datetime, hh: int, mm: int) -> datetime:
+    """오늘 hh:mm 이 아직 안 지났으면 오늘, 지났으면 다음 평일 hh:mm (주말 건너뜀)."""
+    from datetime import timedelta
+
+    nxt = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if nxt <= now:
+        nxt += timedelta(days=1)
+    while nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+    return nxt
+
+
 def market_filter_status(hist: dict[str, pd.DataFrame], window: int = 200) -> str | None:
     """묶음 균등 지수 vs 이동평균 상태를 한 줄로. 데이터가 모자라면 None."""
     from .indicators import sma

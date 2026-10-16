@@ -235,17 +235,14 @@ def _confirm_real_money(trader, cfg, args) -> None:
 
 def _live_schedule(trader, at: str, execute: bool) -> None:
     import time as _time
-    from datetime import datetime, timedelta
+    from datetime import datetime
+
+    from quant.live import next_run_time
 
     hh, mm = (int(x) for x in at.split(":"))
     print(f"매일 {hh:02d}:{mm:02d} 에 실행합니다 (Ctrl+C 로 종료). 킬 스위치: python cli.py live stop")
     while True:
-        now = datetime.now()
-        nxt = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-        if nxt <= now:
-            nxt += timedelta(days=1)
-        while nxt.weekday() >= 5:
-            nxt += timedelta(days=1)
+        nxt = next_run_time(datetime.now(), hh, mm)
         print(f" 다음 실행: {nxt:%Y-%m-%d %H:%M}")
         _time.sleep(max(1.0, (nxt - datetime.now()).total_seconds()))
         trader._prices = None  # 새 데이터로

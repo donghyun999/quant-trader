@@ -337,3 +337,14 @@ def test_market_filter_status():
     assert market_filter_status(make_prices(n=50)) is None            # 데이터 부족
     msg = market_filter_status(make_prices(n=300))                      # 단조 상승 → ON
     assert msg and "투자 ON" in msg and "200일선" in msg
+
+
+def test_next_run_time_skips_weekend():
+    from datetime import datetime
+    from quant.live import next_run_time
+    fri_after = datetime(2026, 10, 16, 16, 0)       # 금요일 16:00, 15:20 은 이미 지남
+    assert next_run_time(fri_after, 15, 20) == datetime(2026, 10, 19, 15, 20)   # 월요일
+    fri_before = datetime(2026, 10, 16, 9, 0)
+    assert next_run_time(fri_before, 15, 20) == datetime(2026, 10, 16, 15, 20)  # 오늘
+    sat = datetime(2026, 10, 17, 12, 0)
+    assert next_run_time(sat, 7, 0) == datetime(2026, 10, 19, 7, 0)

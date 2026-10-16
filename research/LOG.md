@@ -973,3 +973,11 @@ band 는 5%, 10% 두 값. 네 변형을 동시에 시험하므로(다중 비교)
 - 전체 리더보드(13개): ensemble 0.930 > dd_control 0.924 > invvol_hold 0.910 > regime_guard 0.825 > tranched 0.821 > vol_target 0.727 > trend_invvol 0.716 > momentum_ensemble 0.607 > bollinger 0.524 > rsi 0.518 > buy_hold 0.408 > sma_cross 0.357 > dual_momentum 0.293.
 - 실험으로 늘어난 옵션(regime_guard 12개, trend_invvol 6개 등)이 사이드바를 어지럽히는 문제: `Param.advanced` 플래그를 추가하고 28개 파라미터를 고급으로 표시, 대시보드에서는 "고급 설정 (N개) — 기본값 권장" 확장 섹션으로 접음. 기본 파라미터만 바로 보인다. AppTest 로 3개 전략 확인.
 - 교훈: 실험 옵션을 코드에 남기는 비용은 사용자 UI 에서 나타난다. 옵션은 남기되 기본 화면에서 숨기는 것이 "퀀트를 몰라도 쓰는" 목표와 맞다.
+
+---
+
+## 회차 38 — 2026-10-16 (유지 모드: 깨끗한 클론 검증)
+
+- GitHub 에서 새로 클론한 복사본에서 pytest 134 통과, `cli.py strategies` 13개, `live doctor` 문제 없음, pyflakes clean. 로컬에만 있는 파일(데이터 캐시, 계좌 파일, 설정, 로그)에 의존하는 코드·테스트가 없음을 확인.
+- 추적 파일 146개 중 config.toml·paper_account.json·live_log·data_cache·.checked 는 없음(.gitignore 정상).
+- research/results 의 실험 CSV(leaderboard_*.csv, detail_latest_*.csv)가 다수 추적 중. 재현 가능한 산출물이라 필수는 아니지만 회차별 근거로 남긴다. 저장소가 무거워지면 detail_* 만 제외 검토.

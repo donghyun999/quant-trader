@@ -41,6 +41,13 @@ UNIVERSES: dict[str, list[str]] = {
     "spy_only": ["SPY"],
     "samsung_only": ["005930.KS"],
 }
+# 홀드아웃: 개발 중 한 번도 보지 않은 묶음. 과적합(유니버스 선택 편향) 점검용. --holdout 으로만 평가.
+HOLDOUT_UNIVERSES: dict[str, list[str]] = {
+    "us_sectors5": ["XLK", "XLF", "XLE", "XLV", "XLU"],
+    "us_mixed6": ["VTI", "VEA", "VWO", "BND", "IAU", "VNQ"],
+    "kr_theme4": ["091160.KS", "102780.KS", "143850.KS", "148070.KS"],  # 반도체, 삼성그룹, S&P500, 국고채10년
+    "aapl_only": ["AAPL"],
+}
 PERIODS = ["3y", "5y", "10y"]
 WF_PERIOD = "10y"
 WF_SPLITS = 4
@@ -273,6 +280,7 @@ def main(argv=None) -> int:
     ap.add_argument("--min-trade", type=float, default=0.02, help="백테스트 최소 거래 비중 차이 (live threshold 와 동일, 예: 0.02)")
     ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
     ap.add_argument("--universes", default="", help="쉼표 구분 유니버스 이름 (기본 전부)")
+    ap.add_argument("--holdout", action="store_true", help="개발에 쓰지 않은 홀드아웃 유니버스만 평가")
     ap.add_argument("--baseline", default="", help="저장된 리더보드 CSV 와 비교해 robust_score 하락을 경고 (예: research/results/leaderboard.csv)")
     ap.add_argument("--save-baseline", default="", help="이번 결과를 기준선 CSV 로 저장")
     ap.add_argument("--tolerance", type=float, default=0.03, help="기준선 대비 허용 하락폭")
@@ -284,7 +292,10 @@ def main(argv=None) -> int:
                          slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade, cash_rate=args.cash_rate)
     cfg._fee_override = args.fee  # None 이면 시장별 자동
     WF_SPLITS = args.splits
-    unis = {u: t for u, t in UNIVERSES.items() if not args.universes or u in args.universes.split(",")}
+    pool = HOLDOUT_UNIVERSES if args.holdout else UNIVERSES
+    unis = {u: t for u, t in pool.items() if not args.universes or u in args.universes.split(",")}
+    if args.holdout and not args.tag:
+        args.tag = "holdout"
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 

@@ -36,6 +36,8 @@ UNIVERSES: dict[str, list[str]] = {
     "us_global7": ["SPY", "IWM", "EFA", "EEM", "TLT", "GLD", "VNQ"],
     "kr_large4": ["005930.KS", "000660.KS", "035420.KS", "005380.KS"],
     "kr_etf3": ["069500.KS", "229200.KS", "114260.KS"],
+    "kr_top8": ["005930.KS", "000660.KS", "035420.KS", "005380.KS", "000270.KS", "068270.KS", "005490.KS", "105560.KS"],
+    "kr_mixed5": ["069500.KS", "229200.KS", "114260.KS", "148070.KS", "132030.KS"],  # 코스피200, 코스닥150, 국고채3년/10년, 금
     "spy_only": ["SPY"],
     "samsung_only": ["005930.KS"],
 }
@@ -51,7 +53,8 @@ WF_GRIDS: dict[str, dict[str, list]] = {
     "dual_momentum": {"lookback": [63, 126, 252], "top_n": [1, 2]},
     "momentum_ensemble": {"top_n": [1, 2, 3], "skip_recent": [0, 21]},
     "trend_invvol": {"trend_window": [100, 200], "max_weight": [0.5, 1.0]},
-    "vol_target": {"target_vol": [0.08, 0.10, 0.15]},
+    "vol_target": {"target_vol": [0.10, 0.15, 0.20]},
+    "tranched": {"n_tranches": [2, 4]},
     "ensemble": {},
     "buy_hold": {},
 }
@@ -87,6 +90,11 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "vt12_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.12}),
     "vt15_ens": ("vol_target", {"base": "ensemble", "target_vol": 0.15}),
     "vt15_bh": ("vol_target", {"base": "buy_hold", "target_vol": 0.15}),
+    "tr_tv": ("tranched", {"base": "trend_invvol"}),
+    "tr_me": ("tranched", {"base": "momentum_ensemble"}),
+    "tr_dm": ("tranched", {"base": "dual_momentum"}),
+    "ens_untranched": ("ensemble", {"members": "trend_invvol,momentum_ensemble,buy_hold"}),
+    "ens_tr_tv+bh": ("ensemble", {"members": "tranched(base=trend_invvol),buy_hold"}),
 }
 
 
@@ -214,6 +222,7 @@ def score_table(rows: list[dict]) -> pd.DataFrame:
 
 
 def main(argv=None) -> int:
+    global WF_SPLITS
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="5y + 핵심 유니버스 2개만 워크포워드")
     ap.add_argument("--strategies", default="", help="쉼표 구분. 기본 전체")
@@ -223,17 +232,21 @@ def main(argv=None) -> int:
     ap.add_argument("--variant-names", default="", help="쉼표 구분 변형 라벨 (기본 전부)")
     ap.add_argument("--fee", type=float, default=0.0015, help="편도 수수료 (기본 0.0015)")
     ap.add_argument("--tag", default="", help="결과 파일 접미사 (예: fee2x)")
+    ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
+    ap.add_argument("--universes", default="", help="쉼표 구분 유니버스 이름 (기본 전부)")
     args = ap.parse_args(argv)
     names = [s for s in args.strategies.split(",") if s] or list(STRATEGIES)
     if args.only_variants:
         names = []
     cfg = BacktestConfig(fee_pct=args.fee, slippage_pct=CFG.slippage_pct)
+    WF_SPLITS = args.splits
+    unis = {u: t for u, t in UNIVERSES.items() if not args.universes or u in args.universes.split(",")}
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
     print("데이터 로드...")
-    data = {u: get_prices(tk, period=WF_PERIOD) for u, tk in UNIVERSES.items()}
+    data = {u: get_prices(tk, period=WF_PERIOD) for u, tk in unis.items()}
     rows: list[dict] = []
     jobs = [(n, None, None) for n in names]
     if args.variants or args.only_variants:

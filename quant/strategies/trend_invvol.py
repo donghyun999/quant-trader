@@ -36,6 +36,7 @@ class TrendInverseVol(Strategy):
         Param("trend_window", 200, 50, 300, 10, "추세 판단용 이동평균 기간(거래일)."),
         Param("vol_window", 60, 20, 252, 10, "변동성 계산 기간(거래일)."),
         Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중. 넘치는 몫은 현금."),
+        Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
     ]
     multi_asset = True
 
@@ -55,7 +56,7 @@ class TrendInverseVol(Strategy):
         cap = float(self.p["max_weight"])
 
         w = pd.DataFrame(np.nan, index=idx, columns=tickers)
-        for i in np.flatnonzero(month_end_mask(idx)):
+        for i in np.flatnonzero(month_end_mask(idx, self.p['rebal_offset'])):
             row = inverse_vol_weights(close, i, above[i], self.p["vol_window"])
             w.iloc[i] = np.minimum(row, cap)
         return w.ffill().fillna(0.0)

@@ -21,6 +21,7 @@ class MomentumEnsemble(Strategy):
         Param("top_n", 2, 1, 10, 1, "매달 보유할 상위 종목 수."),
         Param("vol_window", 60, 20, 252, 10, "변동성 역가중 계산 기간(거래일). 0이면 균등 비중."),
         Param("skip_recent", 0, 0, 21, 1, "최근 며칠을 모멘텀 계산에서 제외할지 (단기 되돌림 회피, 21=1개월)."),
+        Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
     ]
     multi_asset = True
     LOOKBACKS = (63, 126, 252)
@@ -41,7 +42,7 @@ class MomentumEnsemble(Strategy):
         vol_window = int(self.p["vol_window"])
 
         w = pd.DataFrame(np.nan, index=idx, columns=tickers)
-        for i in np.flatnonzero(month_end_mask(idx)):
+        for i in np.flatnonzero(month_end_mask(idx, self.p['rebal_offset'])):
             valid = score.iloc[i].dropna()
             row = np.zeros(len(tickers))
             if not valid.empty:

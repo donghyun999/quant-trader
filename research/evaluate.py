@@ -63,6 +63,7 @@ WF_GRIDS: dict[str, dict[str, list]] = {
     "vol_target": {"target_vol": [0.10, 0.15, 0.20]},
     "tranched": {"n_tranches": [2, 4]},
     "dd_control": {"dd_trigger": [0.08, 0.12, 0.2]},
+    "regime_guard": {"soft_exposure": [0.3, 0.5, 0.7]},
     "ensemble": {},
     "buy_hold": {},
 }
@@ -101,6 +102,14 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "tr_dm": ("tranched", {"base": "dual_momentum"}),
     "ens_untranched": ("ensemble", {"members": "trend_invvol,momentum_ensemble,buy_hold"}),
     "tv_mkt": ("trend_invvol", {"market_filter": 1}),
+    "rg_fixed": ("regime_guard", {"soft_exposure": 0.5}),    # 격자 없이 기본값 고정 (trend_invvol 과 공정 비교용)
+    "rg_stress": ("regime_guard", {"use_stress": 1}),
+    "tv_fixed": ("trend_invvol", {"trend_window": 200}),      # 격자 없이 기본값 고정
+    "rg_persist5": ("regime_guard", {"use_stress": 1, "stress_days": 5}),
+    "rg_monthly": ("regime_guard", {"daily_exposure": 0}),
+    "rg_hard": ("regime_guard", {"soft_exposure": 0.0}),
+    "tr_rg": ("tranched", {"base": "regime_guard"}),
+    "ens_rg": ("ensemble", {"members": "tranched(base=regime_guard),tranched(base=momentum_ensemble),buy_hold"}),
     "tv_proxy": ("trend_invvol", {"cash_proxy": 1}),
     "tr_tv_proxy": ("tranched", {"base": "trend_invvol(cash_proxy=1)"}),
     "ens_proxy": ("ensemble", {"members": "tranched(base=trend_invvol(cash_proxy=1)),tranched(base=momentum_ensemble),buy_hold"}),

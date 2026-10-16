@@ -9,13 +9,14 @@ from .buy_hold import BuyHold
 from .dual_momentum import DualMomentum
 from .momentum_ensemble import MomentumEnsemble
 from .overlay import DrawdownControl, Ensemble, Tranched, VolTarget
+from .regime_guard import RegimeGuard
 from .rsi_reversion import RsiReversion
 from .sma_cross import SmaCross
 from .trend_invvol import TrendInverseVol
 
 STRATEGIES: dict[str, type[Strategy]] = {
     cls.name: cls
-    for cls in (SmaCross, RsiReversion, BollingerReversion, DualMomentum, MomentumEnsemble, TrendInverseVol, VolTarget, Tranched, Ensemble, DrawdownControl, BuyHold)
+    for cls in (SmaCross, RsiReversion, BollingerReversion, DualMomentum, MomentumEnsemble, TrendInverseVol, RegimeGuard, VolTarget, Tranched, Ensemble, DrawdownControl, BuyHold)
 }
 
 

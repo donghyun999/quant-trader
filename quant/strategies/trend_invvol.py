@@ -37,6 +37,7 @@ class TrendInverseVol(Strategy):
         Param("vol_window", 60, 20, 252, 10, "변동성 계산 기간(거래일)."),
         Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중. 넘치는 몫은 현금."),
         Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
+        Param("max_positions", 0, 0, 20, 1, "보유 종목 수 상한 (0=제한 없음). 넘으면 변동성이 낮은 종목부터 고릅니다."),
         Param("band", 0.0, 0.0, 0.10, 0.01, "추세 판단 완충 밴드. 0.03이면 지수가 이동평균의 +3% 위로 가야 투자 시작, -3% 아래로 가야 현금화 (잦은 전환 방지)."),
         Param("market_filter", 1, 0, 1, 1, "1(기본)이면 묶음 전체(균등 지수)의 추세로 투자/현금을 결정, 0이면 종목별 추세."),
     ]
@@ -70,8 +71,16 @@ class TrendInverseVol(Strategy):
             above = (close > trend).to_numpy() & trend.notna().to_numpy()
         cap = float(self.p["max_weight"])
 
+        max_pos = int(self.p["max_positions"])
         w = pd.DataFrame(np.nan, index=idx, columns=tickers)
         for i in np.flatnonzero(month_end_mask(idx, self.p['rebal_offset'])):
-            row = inverse_vol_weights(close, i, above[i], self.p["vol_window"])
+            mask = above[i].copy()
+            if max_pos and mask.sum() > max_pos and i >= self.p["vol_window"]:
+                vol = close.iloc[i - self.p["vol_window"]:i + 1].pct_change().std(ddof=0).to_numpy()
+                vol = np.where(mask, vol, np.inf)
+                keep = np.argsort(vol)[:max_pos]
+                mask = np.zeros_like(mask)
+                mask[keep] = True
+            row = inverse_vol_weights(close, i, mask, self.p["vol_window"])
             w.iloc[i] = np.minimum(row, cap)
         return w.ffill().fillna(0.0)

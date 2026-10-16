@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from .broker import Broker, PaperBroker, make_broker
@@ -68,6 +69,27 @@ class LiveReport:
         if self.error:
             lines.append(f" 오류: {self.error}")
         return "\n".join(lines)
+
+
+def tranche_calendar(idx: pd.DatetimeIndex, n_tranches: int = 4, spacing: int = 5) -> tuple[list[int], pd.Timestamp | None]:
+    """마지막 날짜가 몇 번째 트랜치 날인지(없으면 빈 리스트)와 다음 트랜치 예상 날짜(영업일 기준 추정)."""
+    from .strategies.dual_momentum import month_end_mask
+
+    if len(idx) == 0:
+        return [], None
+    future = pd.bdate_range(pd.Timestamp(idx[-1]) + pd.offsets.BDay(1), periods=45)
+    ext = idx.append(future)
+    today_pos = len(idx) - 1
+    hits, nxt = [], None
+    for k in range(n_tranches):
+        m = month_end_mask(ext, k * spacing)
+        if m[today_pos]:
+            hits.append(k + 1)
+        later = np.flatnonzero(m[today_pos + 1:])
+        if len(later):
+            cand = ext[today_pos + 1 + later[0]]
+            nxt = cand if nxt is None or cand < nxt else nxt
+    return hits, nxt
 
 
 def _balance_dict(b: Balance) -> dict:
@@ -176,6 +198,16 @@ class LiveTrader:
                         f"데이터가 최신({newest.date()})보다 오래된 종목: {', '.join(stale)}. "
                         "신호는 모든 종목이 함께 있는 마지막 날짜 기준으로 계산됩니다.")
             prices = self.current_prices(hist)
+            if any(k in self.cfg.strategy or k in str(self.cfg.params) for k in ("ensemble", "tranched")):
+                common = None
+                for df in hist.values():
+                    common = df.index if common is None else common.intersection(df.index)
+                hits, nxt = tranche_calendar(common)
+                if hits:
+                    rep.notes.append(f"오늘({common[-1].date()})은 리밸런스 날입니다 (트랜치 {hits}).")
+                else:
+                    rep.notes.append(f"오늘은 리밸런스 날이 아닙니다. 다음 트랜치 예상일: {nxt.date() if nxt is not None else '-'} "
+                                     "(이날 전까지는 가격 변동으로 생긴 작은 비중 차이만 반영됩니다).")
             balance = self.broker.get_balance(self.cfg.tickers)
             rep.balance_before = _balance_dict(balance)
             strategy = get_strategy(self.cfg.strategy, **self.cfg.params)

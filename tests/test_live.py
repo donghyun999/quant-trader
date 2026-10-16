@@ -322,3 +322,12 @@ def test_live_notes_stale_ticker(tmp_path, monkeypatch):
     rep = LiveTrader(_cfg(tmp_path), broker=PaperBroker(acc), prices=prices).run(execute=False)
     assert rep.error == ""
     assert any("AAA" in n and "오래된" in n for n in rep.notes)
+
+
+def test_tranche_calendar():
+    from quant.live import tranche_calendar
+    idx = pd.bdate_range("2024-01-02", "2024-01-31")   # 1/31 은 1월 마지막 거래일 → 트랜치 1
+    hits, nxt = tranche_calendar(idx)
+    assert hits == [1] and nxt is not None and nxt > idx[-1]
+    hits2, nxt2 = tranche_calendar(pd.bdate_range("2024-01-02", "2024-01-17"))
+    assert hits2 == [] and nxt2 is not None

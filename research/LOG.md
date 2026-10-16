@@ -981,3 +981,10 @@ band 는 5%, 10% 두 값. 네 변형을 동시에 시험하므로(다중 비교)
 - GitHub 에서 새로 클론한 복사본에서 pytest 134 통과, `cli.py strategies` 13개, `live doctor` 문제 없음, pyflakes clean. 로컬에만 있는 파일(데이터 캐시, 계좌 파일, 설정, 로그)에 의존하는 코드·테스트가 없음을 확인.
 - 추적 파일 146개 중 config.toml·paper_account.json·live_log·data_cache·.checked 는 없음(.gitignore 정상).
 - research/results 의 실험 CSV(leaderboard_*.csv, detail_latest_*.csv)가 다수 추적 중. 재현 가능한 산출물이라 필수는 아니지만 회차별 근거로 남긴다. 저장소가 무거워지면 detail_* 만 제외 검토.
+
+---
+
+## 회차 39 — 2026-10-16 (유지 모드: 저장소 용량 점검)
+
+- research/results 추적 파일 93개 = 1.8MB (detail_latest* 45개 1.6MB, leaderboard* 45개 180KB), .git 전체 2.8MB. 정리 불필요. 실험별 detail CSV 는 회차 기록의 원자료로 유지.
+- 가장 큰 추적 파일은 92KB(detail_latest.csv)와 80KB(LOG.md). 문제 없음.

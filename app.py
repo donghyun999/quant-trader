@@ -495,6 +495,14 @@ with tabs[5]:
 
     st.subheader("실전 자동매매 (한국투자증권 KIS)")
     lcfg = load_config()
+    from quant.config import validate_config  # noqa: E402
+
+    issues = validate_config(lcfg)
+    if issues:
+        bullet_lines = [f"- {i}" for i in issues]
+        st.warning(f"설정 점검 결과 {len(issues)}건:" + chr(10) + chr(10) + chr(10).join(bullet_lines))
+    else:
+        st.success("설정 점검: 문제 없음 (python cli.py live doctor 와 동일)")
     kill = PROJECT_ROOT / lcfg.risk.kill_switch_file
     has_cfg = (PROJECT_ROOT / "config.toml").exists()
     if not has_cfg:

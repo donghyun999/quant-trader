@@ -167,6 +167,14 @@ class LiveTrader:
         try:
             self.broker.connect()
             hist = self.load_prices()
+            last_dates = {t: df.index[-1] for t, df in hist.items() if len(df)}
+            if last_dates:
+                newest = max(last_dates.values())
+                stale = [f"{t}({d.date()})" for t, d in last_dates.items() if d < newest]
+                if stale:
+                    rep.notes.append(
+                        f"데이터가 최신({newest.date()})보다 오래된 종목: {', '.join(stale)}. "
+                        "신호는 모든 종목이 함께 있는 마지막 날짜 기준으로 계산됩니다.")
             prices = self.current_prices(hist)
             balance = self.broker.get_balance(self.cfg.tickers)
             rep.balance_before = _balance_dict(balance)

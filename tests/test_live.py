@@ -312,3 +312,13 @@ def test_kis_us_order_is_limit_with_slippage(kis):
     assert s.calls[-1]["headers"]["tr_id"] == ENDPOINTS["us_order"]["tr"][("vts", "BUY")]
     r2 = b.submit_order("ZZZZ", "BUY", 1, price=10.0)
     assert not r2.ok and "거래소 코드" in r2.message
+
+
+def test_live_notes_stale_ticker(tmp_path, monkeypatch):
+    monkeypatch.setattr(LiveConfig, "root", property(lambda self: tmp_path))
+    prices = make_prices()
+    prices["AAA"] = prices["AAA"].iloc[:-1]   # AAA 만 하루 늦음
+    acc = PaperAccount(str(tmp_path / "p.json"), 1_000_000)
+    rep = LiveTrader(_cfg(tmp_path), broker=PaperBroker(acc), prices=prices).run(execute=False)
+    assert rep.error == ""
+    assert any("AAA" in n and "오래된" in n for n in rep.notes)

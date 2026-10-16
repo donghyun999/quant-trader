@@ -116,6 +116,17 @@ VARIANTS: dict[str, tuple[str, dict]] = {
 }
 
 
+# 시장별 편도 비용(수수료+세금). 한국 개별주/ETF 0.15% (매도세 포함 평균), 미국 ETF 0.05%. 섞인 묶음은 높은 쪽.
+FEE_BY_MARKET = {"KR": 0.0015, "US": 0.0005}
+
+
+def fee_for(tickers: list[str], override: float | None) -> float:
+    if override is not None:
+        return override
+    kr = any(t.endswith((".KS", ".KQ")) for t in tickers)
+    return FEE_BY_MARKET["KR"] if kr else FEE_BY_MARKET["US"]
+
+
 def _f(x) -> float:
     try:
         v = float(x)
@@ -137,9 +148,10 @@ def evaluate_strategy(name: str, data: dict[str, dict[str, pd.DataFrame]], quick
     if grid is None:
         grid = WF_GRIDS.get(name, {})
     grid = {**grid, **{k: [v] for k, v in fixed.items()}}
-    CFG_ = cfg
     rows: list[dict] = []
     for uni, prices10 in data.items():
+        base_kw = {k: v for k, v in cfg.__dict__.items() if not k.startswith("_")}
+        CFG_ = BacktestConfig(**{**base_kw, "fee_pct": fee_for(list(prices10), getattr(cfg, "_fee_override", None))})
         if cls.multi_asset and len(prices10) == 1 and name == "dual_momentum":
             pass  # 단일 종목 듀얼모멘텀 = 절대 모멘텀만. 평가에 포함.
         # 전체 기간 백테스트 (기본 파라미터)
@@ -248,7 +260,7 @@ def main(argv=None) -> int:
     ap.add_argument("--variants", action="store_true", help="VARIANTS(고정 파라미터 변형)도 포함")
     ap.add_argument("--only-variants", action="store_true", help="VARIANTS 만 평가")
     ap.add_argument("--variant-names", default="", help="쉼표 구분 변형 라벨 (기본 전부)")
-    ap.add_argument("--fee", type=float, default=0.0015, help="편도 수수료 (기본 0.0015)")
+    ap.add_argument("--fee", type=float, default=None, help="편도 수수료 강제 (기본: 한국 0.0015 / 미국 0.0005 자동)")
     ap.add_argument("--tag", default="", help="결과 파일 접미사 (예: fee2x)")
     ap.add_argument("--min-trade", type=float, default=0.02, help="백테스트 최소 거래 비중 차이 (live threshold 와 동일, 예: 0.02)")
     ap.add_argument("--splits", type=int, default=WF_SPLITS, help="워크포워드 구간 수")
@@ -257,7 +269,9 @@ def main(argv=None) -> int:
     names = [s for s in args.strategies.split(",") if s] or list(STRATEGIES)
     if args.only_variants:
         names = []
-    cfg = BacktestConfig(fee_pct=args.fee, slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade)
+    cfg = BacktestConfig(fee_pct=args.fee if args.fee is not None else CFG.fee_pct,
+                         slippage_pct=CFG.slippage_pct, min_trade_weight=args.min_trade)
+    cfg._fee_override = args.fee  # None 이면 시장별 자동
     WF_SPLITS = args.splits
     unis = {u: t for u, t in UNIVERSES.items() if not args.universes or u in args.universes.split(",")}
     out_dir = Path(args.out)

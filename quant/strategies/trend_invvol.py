@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from ..indicators import sma
-from .base import Param, Strategy, align_prices, common_index
+from .base import Param, Strategy, align_prices, common_index, hysteresis
 from .dual_momentum import month_end_mask
 
 
@@ -37,6 +37,7 @@ class TrendInverseVol(Strategy):
         Param("vol_window", 60, 20, 252, 10, "변동성 계산 기간(거래일)."),
         Param("max_weight", 0.5, 0.1, 1.0, 0.05, "한 종목 최대 비중. 넘치는 몫은 현금."),
         Param("rebal_offset", 0, 0, 15, 1, "리밸런스 날짜: 월말에서 며칠(거래일) 뒤. 0=월말."),
+        Param("band", 0.0, 0.0, 0.10, 0.01, "추세 판단 완충 밴드. 0.03이면 지수가 이동평균의 +3% 위로 가야 투자 시작, -3% 아래로 가야 현금화 (잦은 전환 방지)."),
         Param("market_filter", 1, 0, 1, 1, "1(기본)이면 묶음 전체(균등 지수)의 추세로 투자/현금을 결정, 0이면 종목별 추세."),
     ]
     multi_asset = True
@@ -57,7 +58,12 @@ class TrendInverseVol(Strategy):
             norm = close / close.bfill().iloc[0]
             index_px = norm.mean(axis=1)
             idx_trend = sma(index_px, self.p["trend_window"])
-            on = ((index_px > idx_trend) & idx_trend.notna()).to_numpy()
+            band = float(self.p["band"])
+            if band > 0:
+                on = hysteresis(index_px > idx_trend * (1 + band), index_px < idx_trend * (1 - band)).to_numpy() > 0
+                on &= idx_trend.notna().to_numpy()
+            else:
+                on = ((index_px > idx_trend) & idx_trend.notna()).to_numpy()
             above = np.repeat(on[:, None], len(tickers), axis=1) & close.notna().to_numpy()
         else:
             trend = close.apply(lambda s: sma(s, self.p["trend_window"]))

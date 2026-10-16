@@ -62,6 +62,7 @@ WF_GRIDS: dict[str, dict[str, list]] = {
     "trend_invvol": {"trend_window": [100, 200], "max_weight": [0.5, 1.0]},
     "vol_target": {"target_vol": [0.10, 0.15, 0.20]},
     "tranched": {"n_tranches": [2, 4]},
+    "dd_control": {"dd_trigger": [0.08, 0.12, 0.2]},
     "ensemble": {},
     "buy_hold": {},
 }
@@ -100,6 +101,9 @@ VARIANTS: dict[str, tuple[str, dict]] = {
     "tr_dm": ("tranched", {"base": "dual_momentum"}),
     "ens_untranched": ("ensemble", {"members": "trend_invvol,momentum_ensemble,buy_hold"}),
     "tv_mkt": ("trend_invvol", {"market_filter": 1}),
+    "dd10_ens": ("dd_control", {"base": "ensemble", "dd_trigger": 0.10}),
+    "dd15_ens": ("dd_control", {"base": "ensemble", "dd_trigger": 0.15}),
+    "dd10_bh": ("dd_control", {"base": "buy_hold", "dd_trigger": 0.10}),
     "ens_w211": ("ensemble", {"weights": "2,1,1"}),
     "ens_w121": ("ensemble", {"weights": "1,2,1"}),
     "ens_w112": ("ensemble", {"weights": "1,1,2"}),

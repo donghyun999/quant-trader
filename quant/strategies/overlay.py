@@ -204,3 +204,42 @@ class Tranched(Strategy):
             w = strat.generate_weights(aligned).reindex(index=idx, columns=tickers).fillna(0.0)
             total = w if total is None else total + w
         return (total / n).clip(0.0, 1.0)
+
+
+class DrawdownControl(Strategy):
+    name = "dd_control"
+    label = "낙폭 제어 오버레이"
+    description = (
+        "다른 전략(base)의 비중을 그대로 쓰되, 그 전략의 자산 곡선이 고점 대비 일정 비율(기본 10%) 이상 떨어져 있는 동안 "
+        "전체 비중을 절반으로 줄입니다. 낙폭이 고점의 절반 이하로 회복되면 원래 비중으로 돌아갑니다."
+    )
+    params = [
+        Param("base", "ensemble", help="기반 전략 스펙."),
+        Param("dd_trigger", 0.10, 0.03, 0.30, 0.01, "이 낙폭을 넘으면 비중 축소."),
+        Param("scale", 0.5, 0.0, 1.0, 0.05, "축소 시 비중 배수."),
+    ]
+    multi_asset = True
+
+    def validate(self) -> None:
+        name, _ = parse_spec(str(self.p["base"]))
+        if name not in _registry() or name == "dd_control":
+            raise ValueError(f"base 전략 이름이 잘못됐습니다: {self.p['base']}")
+
+    def generate_weights(self, prices: dict[str, pd.DataFrame]) -> pd.DataFrame:
+        aligned = align_prices(prices)
+        idx = common_index(prices)
+        tickers = list(aligned)
+        w = build(str(self.p["base"])).generate_weights(aligned).reindex(index=idx, columns=tickers).fillna(0.0)
+        close = pd.DataFrame({t: aligned[t]["close"] for t in tickers}, index=idx)
+        eq = (1.0 + _portfolio_returns(w, close)).cumprod()
+        dd = eq / eq.cummax() - 1.0
+        trig, half = -float(self.p["dd_trigger"]), -float(self.p["dd_trigger"]) / 2
+        state = hysteresis_series(dd < trig, dd > half)   # 낙폭 깊어지면 1(축소), 절반 회복하면 0
+        scale = pd.Series(np.where(state > 0, float(self.p["scale"]), 1.0), index=idx)
+        return w.mul(scale, axis=0).clip(0.0, 1.0)
+
+
+def hysteresis_series(entry: pd.Series, exit_: pd.Series) -> pd.Series:
+    from .base import hysteresis
+
+    return hysteresis(entry, exit_)
